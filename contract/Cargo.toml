@@ -1,7 +1,7 @@
 [package]
-name = "nft-standard"
+name = "nft-series"
 version = "0.1.0"
-authors = ["Ryan Mehta <ryan.mehta@gmail.com>"]
+authors = ["Matt Lockyer <mattdlockyer@gmail.com>"]
 edition = "2018"
 
 [lib]

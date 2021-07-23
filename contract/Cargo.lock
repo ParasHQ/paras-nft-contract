@@ -363,7 +363,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "nft-standard"
+name = "nft-series"
 version = "0.1.0"
 dependencies = [
  "near-contract-standards",
