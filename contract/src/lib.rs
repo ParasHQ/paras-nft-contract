@@ -107,7 +107,7 @@ impl Contract {
     }
 
 	#[payable]
-	pub fn mint_type(
+	pub fn nft_mint_type(
 		&mut self,
 		token_type: TokenType,
 		receiver_id: ValidAccountId,

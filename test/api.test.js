@@ -74,7 +74,7 @@ describe('NFT Series', function () {
 		try {
 			await alice.functionCall({
 				contractId,
-				methodName: 'mint_type',
+				methodName: 'nft_mint_type',
 				args: {
 					token_type,
 					receiver_id: contractId
@@ -91,7 +91,7 @@ describe('NFT Series', function () {
 	it('should allow the owner to mint a token of a particular type', async function () {
 		await contractAccount.functionCall({
 			contractId,
-			methodName: 'mint_type',
+			methodName: 'nft_mint_type',
 			args: {
 				token_type,
 				receiver_id: contractId
@@ -126,7 +126,7 @@ describe('NFT Series', function () {
 		try {
 			await contractAccount.functionCall({
 				contractId,
-				methodName: 'mint_type',
+				methodName: 'nft_mint_type',
 				args: {
 					token_type,
 					receiver_id: contractId
