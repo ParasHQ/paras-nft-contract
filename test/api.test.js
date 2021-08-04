@@ -69,6 +69,17 @@ describe('NFT Series', function () {
 		assert.strictEqual(token_type_id, 1);
 		assert.strictEqual(owner_id, contractId);
 		assert.strictEqual(type_metadata.copies, 1);
+
+		const types = await contractAccount.viewFunction(
+			contractId,
+			'nft_get_types',
+			{
+				limit: 10
+			}
+		)
+
+		console.log(types)
+		assert.strictEqual(types.length, 1);
 	});
 
 	it('should NOT allow a NON owner to mint copies', async function () {

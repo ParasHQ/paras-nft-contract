@@ -165,6 +165,26 @@ impl Contract {
 		(token_type_id, type_owner, token_type)
 	}
 
+	pub fn nft_get_types(
+		&self,
+		from_index: Option<U128>,
+		limit: Option<u64>
+	) -> Vec<TokenMetadata> {
+        let start_index: u128 = from_index.map(From::from).unwrap_or_default();
+        assert!(
+            (self.token_types.len() as u128) > start_index,
+            "Out of bounds, please use a smaller from_index."
+        );
+        let limit = limit.map(|v| v as usize).unwrap_or(usize::MAX);
+        assert_ne!(limit, 0, "Cannot provide limit of 0.");
+        
+		self.token_types.iter()
+            .skip(start_index as usize)
+            .take(limit)
+            .map(|(_, token_metadata)| token_metadata)
+            .collect()
+    }
+
 	pub fn nft_supply_for_type(
         &self,
         token_type_title: TokenTypeTitle,
