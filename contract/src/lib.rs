@@ -9,7 +9,7 @@ use near_contract_standards::non_fungible_token::core::{
 use near_contract_standards::non_fungible_token::NonFungibleToken;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{LazyOption, LookupMap, UnorderedMap, UnorderedSet};
-use near_sdk::json_types::{U64, ValidAccountId};
+use near_sdk::json_types::{U64, U128, ValidAccountId};
 use near_sdk::{
     env, near_bindgen, Balance, AccountId, BorshStorageKey, PanicOnDefault, Promise, PromiseOrValue,
 };
@@ -246,7 +246,7 @@ impl Contract {
         Some(Token { token_id, owner_id, metadata: Some(metadata), approved_account_ids })
 	}
 
-	// core here because not using macro below
+	// core here because no macro below
 
 	#[payable]
 	pub fn nft_transfer(
@@ -271,11 +271,75 @@ impl Contract {
 		self.tokens.nft_transfer_call(receiver_id, token_id, approval_id, memo, msg)
 	}
 
+	// enumeration here because no macro below
+
+	pub fn nft_total_supply(&self) -> U128 {
+		(self.tokens.owner_by_id.len() as u128).into()
+	}
+
+    pub fn nft_tokens(&self, from_index: Option<U128>, limit: Option<u64>) -> Vec<Token> {
+        // Get starting index, whether or not it was explicitly given.
+        // Defaults to 0 based on the spec:
+        // https://nomicon.io/Standards/NonFungibleToken/Enumeration.html#interface
+        let start_index: u128 = from_index.map(From::from).unwrap_or_default();
+        assert!(
+            (self.tokens.owner_by_id.len() as u128) > start_index,
+            "Out of bounds, please use a smaller from_index."
+        );
+        let limit = limit.map(|v| v as usize).unwrap_or(usize::MAX);
+        assert_ne!(limit, 0, "Cannot provide limit of 0.");
+        self.tokens.owner_by_id
+            .iter()
+            .skip(start_index as usize)
+            .take(limit)
+            .map(|(token_id, _)| self.nft_token(token_id).unwrap())
+            .collect()
+    }
+
+    pub fn nft_supply_for_owner(self, account_id: ValidAccountId) -> U128 {
+        let tokens_per_owner = self.tokens.tokens_per_owner.expect(
+            "Could not find tokens_per_owner when calling a method on the enumeration standard.",
+        );
+        tokens_per_owner
+            .get(account_id.as_ref())
+            .map(|account_tokens| U128::from(account_tokens.len() as u128))
+            .unwrap_or(U128(0))
+    }
+
+	pub fn nft_tokens_for_owner(
+        &self,
+        account_id: ValidAccountId,
+        from_index: Option<U128>,
+        limit: Option<u64>,
+    ) -> Vec<Token> {
+        let tokens_per_owner = self.tokens.tokens_per_owner.as_ref().expect(
+            "Could not find tokens_per_owner when calling a method on the enumeration standard.",
+        );
+        let token_set = if let Some(token_set) = tokens_per_owner.get(account_id.as_ref()) {
+            token_set
+        } else {
+            return vec![];
+        };
+        let limit = limit.map(|v| v as usize).unwrap_or(usize::MAX);
+        assert_ne!(limit, 0, "Cannot provide limit of 0.");
+        let start_index: u128 = from_index.map(From::from).unwrap_or_default();
+        assert!(
+            token_set.len() as u128 > start_index,
+            "Out of bounds, please use a smaller from_index."
+        );
+        token_set
+            .iter()
+            .skip(start_index as usize)
+            .take(limit)
+            .map(|token_id| self.nft_token(token_id).unwrap())
+            .collect()
+    }
+
 }
 
 // near_contract_standards::impl_non_fungible_token_core!(Contract, tokens);
 near_contract_standards::impl_non_fungible_token_approval!(Contract, tokens);
-near_contract_standards::impl_non_fungible_token_enumeration!(Contract, tokens);
+// near_contract_standards::impl_non_fungible_token_enumeration!(Contract, tokens);
 
 #[near_bindgen]
 impl NonFungibleTokenMetadataProvider for Contract {
