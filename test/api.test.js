@@ -60,7 +60,7 @@ describe('NFT Series', function () {
 
 		const [token_type_id, owner_id, type_metadata] = await contractAccount.viewFunction(
 			contractId,
-			'nft_get_type',
+			'nft_get_type_info',
 			{
 				token_type_title
 			}
@@ -135,11 +135,16 @@ describe('NFT Series', function () {
 				token_type_title
 			}
 		)
-		
-		console.log(tokens[0].metadata.title)
+		const [TOKEN_DELIMETER, TITLE_DELIMETER, EDITION_DELIMETER] = await contractAccount.viewFunction(
+			contractId,
+			'nft_get_type_format',
+		)
+		const { token_id, owner_id, metadata: { title, copies } } = tokens[0]
+		const formattedTitle = `${token_type_title}${TITLE_DELIMETER}${token_id.split(TOKEN_DELIMETER)[1]}${EDITION_DELIMETER}${copies}`
 
-		assert.strictEqual(tokens[0].token_id, '1:1');
-		assert.strictEqual(tokens[0].owner_id, contractId);
+		assert.strictEqual(token_id, '1:1');
+		assert.strictEqual(title, formattedTitle);
+		assert.strictEqual(owner_id, contractId);
 	});
 
 	it('should NOT allow the owner to mint more than copies', async function () {
