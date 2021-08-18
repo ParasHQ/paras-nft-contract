@@ -19,6 +19,11 @@ Everything should work if you have NEAR development env for Rust contracts set u
 $ env NEAR_ENV=local near --keyPath ~/.near/localnet/validator_key.json deploy --accountId comic.test.near
 ```
 
+### Nft deploy
+```
+$ env NEAR_ENV=local near --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near new_default_meta '{"owner_id":"comic.test.near"}'
+```
+
 ### Nft create type
 ```
 $ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_create_type '{"token_type":"naruto-2","token_metadata":{"title":"Naruto Shippuden ch.2: Menolong sasuke","media":"bafybeiax25bdn5go7b6xoc7kocfw3kbzng7ijnpemdo6aiogumzx53s6ga", "reference":"bafybeihvoofv5rkclwipij3rlozllrpyuc4wpcux6jve6o6qdbm4v7gepi"},"price":"1000000000000000000000000"}' --depositYocto 6560000000000000000000
