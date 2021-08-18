@@ -1,5 +1,6 @@
 const assert = require('assert');
 const { parseNearAmount } = require('near-api-js/lib/utils/format');
+const { contract } = require('./near-utils');
 const testUtils = require('./test-utils');
 
 const {
@@ -13,7 +14,7 @@ describe('NFT Series', function () {
 	this.timeout(10000);
 
 	const now = Date.now().toString()
-	let token_type_title = 'dog-' + now
+	let token_type = 'dog-' + now
 
 	/// users
 	const aliceId = 'alice-' + now + '.' + contractId;
@@ -43,30 +44,32 @@ describe('NFT Series', function () {
 		assert.notStrictEqual(state.code_hash, '11111111111111111111111111111111');
 	});
 
-	it('should allow someone to create a type', async function () {
+	it('should allow owner to create a type', async function () {
 		await contractAccount.functionCall({
 			contractId,
 			methodName: 'nft_create_type',
 			args: {
 				token_metadata: {
-					title: token_type_title,
+					title: token_type,
 					media: 'https://placedog.net/500',
 					copies: 1,
-				}
+				},
+				token_type: token_type,
+				price: "1000000000000000000000000"
 			},
 			gas,
 			attachedDeposit: parseNearAmount('0.1')
 		})
 
-		const [token_type_id, owner_id, type_metadata] = await contractAccount.viewFunction(
+		const [token_type_ret, owner_id, type_metadata] = await contractAccount.viewFunction(
 			contractId,
 			'nft_get_type_info',
 			{
-				token_type_title
+				token_type
 			}
 		)
 
-		assert.strictEqual(token_type_id, 1);
+		assert.strictEqual(token_type_ret, token_type);
 		assert.strictEqual(owner_id, contractId);
 		assert.strictEqual(type_metadata.copies, 1);
 
@@ -82,13 +85,60 @@ describe('NFT Series', function () {
 		assert.strictEqual(types.length, 1);
 	});
 
+	it('should NOT allow non-owner to create type', async function() {
+		try {
+			await alice.functionCall({
+				contractId,
+				methodName: 'nft_create_type',
+				args: {
+				token_metadata: {
+					title: token_type,
+					media: 'https://placedog.net/500',
+					copies: 1,
+				},
+				token_type: token_type,
+				price: "1000000000000000000000000"
+			},
+			gas,
+			attachedDeposit: parseNearAmount('0.1')
+			})
+			assert(false)
+		} catch(e) {
+			assert(true)
+		}
+	});
+
+	it('should NOT create the same type', async function () {
+		try {
+			await contractAccount.functionCall({
+				contractId,
+				methodName: 'nft_create_type',
+				args: {
+				token_metadata: {
+					title: token_type,
+					media: 'https://placedog.net/500',
+					copies: 1,
+				},
+				token_type: token_type,
+				price: "1000000000000000000000000"
+			},
+			gas,
+			attachedDeposit: parseNearAmount('0.1')
+			})
+			assert(false)
+		} catch(e) {
+			assert(true)
+		}
+
+	});
+
 	it('should NOT allow a NON owner to mint copies', async function () {
 		try {
 			await alice.functionCall({
 				contractId,
 				methodName: 'nft_mint_type',
 				args: {
-					token_type_title,
+					token_type,
 					receiver_id: contractId
 				},
 				gas,
@@ -109,7 +159,7 @@ describe('NFT Series', function () {
 			contractId,
 			methodName: 'nft_mint_type',
 			args: {
-				token_type_title,
+				token_type,
 				receiver_id: contractId
 			},
 			gas,
@@ -123,7 +173,7 @@ describe('NFT Series', function () {
 			contractId,
 			'nft_supply_for_type',
 			{
-				token_type_title
+				token_type
 			}
 		)
 		assert.strictEqual(parseInt(supply_for_type, 10), 1);
@@ -132,7 +182,7 @@ describe('NFT Series', function () {
 			contractId,
 			'nft_tokens_by_type',
 			{
-				token_type_title
+				token_type
 			}
 		)
 		const [TOKEN_DELIMETER, TITLE_DELIMETER, EDITION_DELIMETER] = await contractAccount.viewFunction(
@@ -140,11 +190,74 @@ describe('NFT Series', function () {
 			'nft_get_type_format',
 		)
 		const { token_id, owner_id, metadata: { title, copies } } = tokens[0]
-		const formattedTitle = `${token_type_title}${TITLE_DELIMETER}${token_id.split(TOKEN_DELIMETER)[1]}${EDITION_DELIMETER}${copies}`
 
-		assert.strictEqual(token_id, '1:1');
-		assert.strictEqual(title, formattedTitle);
+		assert.strictEqual(token_id, token_type + ':1');
+		assert.strictEqual(title, token_type);
 		assert.strictEqual(owner_id, contractId);
+	});
+
+	it('should allow anyone to buy', async function() {
+		await alice.functionCall({
+			contractId,
+			methodName: 'nft_buy',
+			args: {
+				token_type: token_type,
+				receiver_id: aliceId
+			},
+			gas,
+			attachedDeposit: parseNearAmount('1')
+		});
+
+		const tokens = await contractAccount.viewFunction(
+			contractId,
+			'nft_tokens_by_type',
+			{
+				token_type
+			}
+		)
+
+		const { token_id, owner_id, metadata: { title, copies } } = tokens[1]
+
+		const token_type_balance = await contractAccount.viewFunction(
+			contractId,
+			'nft_type_balance',
+			{
+				account_id: aliceId,
+				token_type: token_type
+			}
+		);
+
+		assert.strictEqual(token_id, token_type + ":2");
+		assert.strictEqual(token_type_balance, "1");
+	});
+
+	it('should NOT allow mint after set mintable to false', async function () {
+		await contractAccount.functionCall({
+			contractId,
+			methodName: 'nft_set_type_mintable',
+			args: {
+				token_type: token_type,
+				is_mintable: false
+			},
+			gas,
+			attachedDeposit: "1"
+		});
+
+		try {
+			await contractAccount.functionCall({
+				contractId,
+				methodName: 'nft_mint_type',
+				args: {
+					token_type,
+					receiver_id: contractId
+				},
+				gas,
+				attachedDeposit: parseNearAmount('0.1')
+			})
+			assert(false)
+		} catch(e) {
+			assert(true)
+		}
 	});
 
 	it('should NOT allow the owner to mint more than copies', async function () {
@@ -153,7 +266,7 @@ describe('NFT Series', function () {
 				contractId,
 				methodName: 'nft_mint_type',
 				args: {
-					token_type_title,
+					token_type,
 					receiver_id: contractId
 				},
 				gas,
