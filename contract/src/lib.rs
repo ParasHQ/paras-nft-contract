@@ -11,13 +11,13 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{LazyOption, LookupMap, UnorderedMap, UnorderedSet};
 use near_sdk::json_types::{U64, U128, ValidAccountId};
 use near_sdk::{
-    assert_one_yocto, log, env, near_bindgen, Balance, AccountId, BorshStorageKey, PanicOnDefault, Promise, PromiseOrValue,
+    assert_one_yocto, env, near_bindgen, serde_json::json, Balance, AccountId, BorshStorageKey, PanicOnDefault, Promise, PromiseOrValue,
 };
 
 /// between token_type_id and edition number e.g. 42:2 where 42 is type and 2 is edition
 pub const TOKEN_DELIMETER: char = ':';
 /// TokenMetadata.title returned for individual token e.g. "Title — 2/10" where 10 is max copies
-pub const TITLE_DELIMETER: &str = " — ";
+pub const TITLE_DELIMETER: &str = " #";
 /// e.g. "Title — 2/10" where 10 is max copies
 pub const EDITION_DELIMETER: &str = "/";
 
@@ -116,6 +116,10 @@ impl Contract {
         assert_eq!(owner_id, self.tokens.owner_id, "Paras: Only owner can set type");
 
         assert!(self.token_types.get(&token_type).is_none(), "Paras: duplicate token_type");
+
+        let title = token_metadata.title.clone();
+        assert!(title.is_some(), "token_metadata.title is required");
+
         self.token_types.insert(&token_type, &token_metadata);
 		self.type_owners.insert(&token_type, &owner_id);
 		self.tokens_by_type.insert(&token_type, &UnorderedSet::new(
@@ -128,7 +132,18 @@ impl Contract {
         self.type_price.insert(&token_type, &price.into());
         self.type_is_mintable.insert(&token_type, &true);
 
-        log!("create_type: {};{:?};{:?}", token_type, token_metadata, price);
+        env::log(
+            json!({
+                "type": "create_type",
+                "params": {
+                    "token_type": token_type,
+                    "token_metadata": token_metadata,
+                    "price": price
+                }
+            })
+            .to_string()
+            .as_bytes()
+        );
 
         refund_deposit(env::storage_usage() - initial_storage_usage);
     }
@@ -223,7 +238,10 @@ impl Contract {
         }
 
         refund_deposit(env::storage_usage() - initial_storage_usage);
-        Token { token_id, owner_id, metadata, approved_account_ids }
+
+        let token_res = self.nft_token(token_id.clone()).unwrap();
+
+        Token { token_id, owner_id, metadata: token_res.metadata, approved_account_ids }
     }
 
     #[payable]
@@ -322,7 +340,15 @@ impl Contract {
 		// CUSTOM (switch metadata for the token_type metadata)
 		let mut token_id_iter = token_id.split(TOKEN_DELIMETER);
 		let token_type = token_id_iter.next().unwrap().parse().unwrap();
-		let metadata = self.token_types.get(&token_type).unwrap();
+		let mut metadata = self.token_types.get(&token_type).unwrap();
+        metadata.title = Some(
+            format!(
+                "{}{}{}",
+                metadata.title.unwrap(),
+                TITLE_DELIMETER,
+                token_id_iter.next().unwrap()
+            )
+        );
         Some(Token { token_id, owner_id, metadata: Some(metadata), approved_account_ids })
 	}
 
@@ -337,24 +363,21 @@ impl Contract {
 		memo: Option<String>,
 	) {
         let receiver_id_str = receiver_id.to_string();
-        
+        let sender_id = env::predecessor_account_id();
 		self.tokens.nft_transfer(receiver_id, token_id.clone(), approval_id, memo);
-
-        let mut token_id_iter = token_id.split(TOKEN_DELIMETER);
-		let token_type: TokenType = token_id_iter.next().unwrap().parse().unwrap();
-
-        let type_sender_id = format!("{}{}{}", token_type, TYPE_OWNERSHIP_DELIMTER, env::predecessor_account_id());
-        let type_receiver_id = format!("{}{}{}", token_type, TYPE_OWNERSHIP_DELIMTER, receiver_id_str);
-
-        let supply_receiver = self.type_balances.get(&type_receiver_id);
-        let supply_sender = self.type_balances.get(&type_sender_id);
-
-        if supply_receiver.is_some() {
-            self.type_balances.insert(&type_receiver_id, &(supply_receiver.unwrap() + 1));
-        } else {
-            self.type_balances.insert(&type_receiver_id, &1);
-        }
-        self.type_balances.insert(&type_sender_id, &(supply_sender.unwrap()-1));
+        self.transfer_type_balance_calculation(&sender_id, token_id.clone(), &receiver_id_str);
+        env::log(
+            json!({
+                "type": "transfer",
+                "params": {
+                    "token_id": token_id,
+                    "sender_id": sender_id,
+                    "receiver_id": receiver_id_str
+                }
+            })
+            .to_string()
+            .as_bytes()
+        );
 	}
 
 	#[payable]
@@ -366,8 +389,47 @@ impl Contract {
 		memo: Option<String>,
 		msg: String,
 	) -> PromiseOrValue<bool> {
-		self.tokens.nft_transfer_call(receiver_id, token_id, approval_id, memo, msg)
+        let receiver_id_str = receiver_id.to_string();
+        let sender_id = env::predecessor_account_id();
+		let nft_transfer_call_ret = self.tokens.nft_transfer_call(receiver_id, token_id.clone(), approval_id, memo, msg);
+        self.transfer_type_balance_calculation(&sender_id, token_id.clone(), &receiver_id_str);
+        env::log(
+            json!({
+                "type": "transfer",
+                "params": {
+                    "token_id": token_id,
+                    "sender_id": sender_id,
+                    "receiver_id": receiver_id_str
+                }
+            })
+            .to_string()
+            .as_bytes()
+        );
+        nft_transfer_call_ret
 	}
+
+    fn transfer_type_balance_calculation(
+        &mut self, 
+        sender_id: &AccountId, 
+        token_id: TokenId, 
+        receiver_id: &AccountId
+    ) {
+        let mut token_id_iter = token_id.split(TOKEN_DELIMETER);
+		let token_type: TokenType = token_id_iter.next().unwrap().parse().unwrap();
+
+        let type_sender_id = format!("{}{}{}", token_type, TYPE_OWNERSHIP_DELIMTER, sender_id.clone());
+        let type_receiver_id = format!("{}{}{}", token_type, TYPE_OWNERSHIP_DELIMTER, receiver_id.clone());
+
+        let supply_receiver = self.type_balances.get(&type_receiver_id);
+        let supply_sender = self.type_balances.get(&type_sender_id);
+
+        if supply_receiver.is_some() {
+            self.type_balances.insert(&type_receiver_id, &(supply_receiver.unwrap() + 1));
+        } else {
+            self.type_balances.insert(&type_receiver_id, &1);
+        }
+        self.type_balances.insert(&type_sender_id, &(supply_sender.unwrap()-1));
+    }
 
 	// CUSTOM enumeration standard modified here because no macro below
 
