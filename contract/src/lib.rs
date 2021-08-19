@@ -74,7 +74,7 @@ impl Contract {
                 name: "Comic by Paras".to_string(),
                 symbol: "COMIC".to_string(),
                 icon: Some(DATA_IMAGE_SVG_NEAR_ICON.to_string()),
-                base_uri: Some("https://ipfs.fleek.co".to_string()),
+                base_uri: Some("https://ipfs.fleek.co/ipfs".to_string()),
                 reference: None,
                 reference_hash: None,
             },
