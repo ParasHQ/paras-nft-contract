@@ -21,7 +21,7 @@ $ env NEAR_ENV=local near --keyPath ~/.near/localnet/validator_key.json deploy -
 
 ### Nft deploy
 ```
-$ env NEAR_ENV=local near --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near new_default_meta '{"owner_id":"comic.test.near"}'
+$ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near new_default_meta '{"owner_id":"comic.test.near"}'
 ```
 
 ### Nft create type

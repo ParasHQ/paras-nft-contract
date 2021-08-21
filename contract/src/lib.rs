@@ -36,7 +36,7 @@ pub struct Contract {
     metadata: LazyOption<NFTContractMetadata>,
     // CUSTOM
     token_types: UnorderedMap<TokenType, TokenMetadata>,
-    type_owners: LookupMap<TokenType, AccountId>,
+    type_authors: LookupMap<TokenType, AccountId>,
     tokens_by_type: LookupMap<TokenType, UnorderedSet<TokenId>>,
     type_price: LookupMap<TokenType, u128>,
     type_balances: LookupMap<TypeOwnerId, Balance>,
@@ -54,7 +54,7 @@ enum StorageKey {
     Approval,
     // CUSTOM
     TokenTypes,
-    TypeOwners,
+    TypeAuthors,
     TokensByType,
     TokensByTypeInner { token_type: String },
     TypePrice,
@@ -94,7 +94,7 @@ impl Contract {
                 Some(StorageKey::Approval),
             ),
             token_types: UnorderedMap::new(StorageKey::TokenTypes),
-            type_owners: LookupMap::new(StorageKey::TypeOwners),
+            type_authors: LookupMap::new(StorageKey::TypeAuthors),
             tokens_by_type: LookupMap::new(StorageKey::TokensByType),
             metadata: LazyOption::new(StorageKey::Metadata, Some(&metadata)),
             type_price: LookupMap::new(StorageKey::TypePrice),
@@ -110,6 +110,7 @@ impl Contract {
         &mut self,
         token_type: TokenType,
         token_metadata: TokenMetadata,
+        author_id: ValidAccountId,
         price: U128,
     ) {
         let initial_storage_usage = env::storage_usage();
@@ -128,7 +129,7 @@ impl Contract {
         assert!(title.is_some(), "token_metadata.title is required");
 
         self.token_types.insert(&token_type, &token_metadata);
-        self.type_owners.insert(&token_type, &owner_id);
+        self.type_authors.insert(&token_type, &author_id.to_string());
         self.tokens_by_type.insert(
             &token_type,
             &UnorderedSet::new(
@@ -148,6 +149,7 @@ impl Contract {
                 "params": {
                     "token_type": token_type,
                     "token_metadata": token_metadata,
+                    "author_id": author_id,
                     "price": price
                 }
             })
@@ -159,20 +161,22 @@ impl Contract {
     }
 
     #[payable]
-    pub fn nft_buy(&mut self, token_type: TokenType, receiver_id: ValidAccountId) -> Token {
+    pub fn nft_buy(&mut self, token_type: TokenType, receiver_id: ValidAccountId) -> Promise {
+        let type_author = self.type_authors.get(&token_type).expect("no type owner");
         let price: u128 = self.type_price.get(&token_type).unwrap();
         assert!(
             env::attached_deposit() >= price,
             "Paras: attached deposit is less than price : {}",
             price
         );
-        self._nft_mint_type(token_type, receiver_id)
+        self._nft_mint_type(token_type, receiver_id);
+        Promise::new(type_author).transfer(price)
     }
 
     #[payable]
     pub fn nft_mint_type(&mut self, token_type: TokenType, receiver_id: ValidAccountId) -> Token {
-        let type_owner = self.type_owners.get(&token_type).expect("no type owner");
-        assert_eq!(env::predecessor_account_id(), type_owner, "not type owner");
+        let type_author = self.type_authors.get(&token_type).expect("no type owner");
+        assert_eq!(env::predecessor_account_id(), type_author, "not type owner");
         self._nft_mint_type(token_type, receiver_id)
     }
 
@@ -286,7 +290,7 @@ impl Contract {
     ) -> (TokenType, AccountId, TokenMetadata, bool) {
         (
             token_type.clone(),
-            self.type_owners.get(&token_type).unwrap(),
+            self.type_authors.get(&token_type).unwrap(),
             self.token_types.get(&token_type).unwrap(),
             self.type_is_mintable.get(&token_type).unwrap(),
         )
