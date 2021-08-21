@@ -157,27 +157,38 @@ impl Contract {
             .as_bytes(),
         );
 
-        refund_deposit(env::storage_usage() - initial_storage_usage);
+        refund_deposit(env::storage_usage() - initial_storage_usage, env::attached_deposit());
     }
 
     #[payable]
-    pub fn nft_buy(&mut self, token_type: TokenType, receiver_id: ValidAccountId) -> Promise {
+    pub fn nft_buy(&mut self, token_type: TokenType, receiver_id: ValidAccountId) -> Token {
+        let initial_storage_usage = env::storage_usage();
+
         let type_author = self.type_authors.get(&token_type).expect("no type owner");
         let price: u128 = self.type_price.get(&token_type).unwrap();
+        let attached_deposit = env::attached_deposit();
         assert!(
-            env::attached_deposit() >= price,
+            attached_deposit >= price,
             "Paras: attached deposit is less than price : {}",
             price
         );
-        self._nft_mint_type(token_type, receiver_id);
-        Promise::new(type_author).transfer(price)
+        let token: Token = self._nft_mint_type(token_type, receiver_id);
+        Promise::new(type_author).transfer(price);
+
+        refund_deposit(env::storage_usage() - initial_storage_usage, attached_deposit-price);
+        token
     }
 
     #[payable]
     pub fn nft_mint_type(&mut self, token_type: TokenType, receiver_id: ValidAccountId) -> Token {
+        let initial_storage_usage = env::storage_usage();
+
         let type_author = self.type_authors.get(&token_type).expect("no type owner");
         assert_eq!(env::predecessor_account_id(), type_author, "not type owner");
-        self._nft_mint_type(token_type, receiver_id)
+        let token: Token = self._nft_mint_type(token_type, receiver_id);
+
+        refund_deposit(env::storage_usage() - initial_storage_usage, env::attached_deposit());
+        token
     }
 
     fn _nft_mint_type(&mut self, token_type: TokenType, receiver_id: ValidAccountId) -> Token {
@@ -186,7 +197,6 @@ impl Contract {
             true,
             "Paras: Token type is not mintable"
         );
-        let initial_storage_usage = env::storage_usage();
 
         let mut tokens_by_type = self.tokens_by_type.get(&token_type).unwrap();
         let num_tokens = tokens_by_type.len();
@@ -245,7 +255,7 @@ impl Contract {
             self.type_balances.insert(&type_owner_id, &1);
         }
 
-        refund_deposit(env::storage_usage() - initial_storage_usage);
+        
 
         let token_res = self.nft_token(token_id.clone()).unwrap();
 
@@ -589,9 +599,8 @@ impl NonFungibleTokenResolver for Contract {
 
 /// from https://github.com/near/near-sdk-rs/blob/e4abb739ff953b06d718037aa1b8ab768db17348/near-contract-standards/src/non_fungible_token/utils.rs#L29
 
-pub fn refund_deposit(storage_used: u64) {
+pub fn refund_deposit(storage_used: u64, attached_deposit: Balance) {
     let required_cost = env::storage_byte_cost() * Balance::from(storage_used);
-    let attached_deposit = env::attached_deposit();
 
     assert!(
         required_cost <= attached_deposit,
