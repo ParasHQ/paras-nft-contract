@@ -26,17 +26,17 @@ $ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --a
 
 ### Nft create type
 ```
-$ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_create_type '{"token_type":"naruto-2","token_metadata":{"title":"Naruto Shippuden ch.2: Menolong sasuke","media":"bafybeiax25bdn5go7b6xoc7kocfw3kbzng7ijnpemdo6aiogumzx53s6ga", "reference":"bafybeihvoofv5rkclwipij3rlozllrpyuc4wpcux6jve6o6qdbm4v7gepi"},"price":"1000000000000000000000000"}' --depositYocto 6560000000000000000000
+$ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_create_type '{"token_type":"naruto-2","author_id":"alice.test.near","token_metadata":{"title":"Naruto Shippuden ch.2: Menolong sasuke","media":"bafybeiax25bdn5go7b6xoc7kocfw3kbzng7ijnpemdo6aiogumzx53s6ga", "reference":"bafybeihvoofv5rkclwipij3rlozllrpyuc4wpcux6jve6o6qdbm4v7gepi"},"price":"1000000000000000000000000"}' --depositYocto 11790000000000000000000
 ```
 
 ### Nft buy
 ```
-$ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_buy '{"token_type":"naruto-2","receiver_id":"comic.test.near"}' --depositYocto 1000000000000000000000000
+$ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_buy '{"token_type":"naruto-2","receiver_id":"comic.test.near"}' --depositYocto 1018320000000000000000000
 ```
 
 ### Nft mint
 ```
-$ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_mint_type '{"token_type":"naruto-2","receiver_id":"comic.test.near"}' --depositYocto 1000000000000000000000000
+$ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_mint_type '{"token_type":"naruto-2","receiver_id":"comic.test.near"}' --depositYocto 18320000000000000000000
 ```
 
 ### Nft transfer
