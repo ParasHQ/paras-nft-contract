@@ -157,7 +157,7 @@ impl Contract {
             .as_bytes(),
         );
 
-        refund_deposit(env::storage_usage() - initial_storage_usage, env::attached_deposit());
+        refund_deposit(env::storage_usage() - initial_storage_usage, 0);
     }
 
     #[payable]
@@ -175,7 +175,7 @@ impl Contract {
         let token: Token = self._nft_mint_type(token_type, receiver_id);
         Promise::new(type_author).transfer(price);
 
-        refund_deposit(env::storage_usage() - initial_storage_usage, attached_deposit-price);
+        refund_deposit(env::storage_usage() - initial_storage_usage, price);
         token
     }
 
@@ -187,7 +187,7 @@ impl Contract {
         assert_eq!(env::predecessor_account_id(), type_author, "not type owner");
         let token: Token = self._nft_mint_type(token_type, receiver_id);
 
-        refund_deposit(env::storage_usage() - initial_storage_usage, env::attached_deposit());
+        refund_deposit(env::storage_usage() - initial_storage_usage, 0);
         token
     }
 
@@ -599,8 +599,9 @@ impl NonFungibleTokenResolver for Contract {
 
 /// from https://github.com/near/near-sdk-rs/blob/e4abb739ff953b06d718037aa1b8ab768db17348/near-contract-standards/src/non_fungible_token/utils.rs#L29
 
-pub fn refund_deposit(storage_used: u64, attached_deposit: Balance) {
+fn refund_deposit(storage_used: u64, extra_spend: Balance) {
     let required_cost = env::storage_byte_cost() * Balance::from(storage_used);
+    let attached_deposit = env::attached_deposit() - extra_spend;
 
     assert!(
         required_cost <= attached_deposit,
