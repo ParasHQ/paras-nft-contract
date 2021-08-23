@@ -22,10 +22,7 @@ pub const TITLE_DELIMETER: &str = " #";
 /// e.g. "Title — 2/10" where 10 is max copies
 pub const EDITION_DELIMETER: &str = "/";
 
-pub const TYPE_OWNERSHIP_DELIMTER: &str = "::";
-
 pub type TokenType = String;
-pub type TypeOwnerId = String;
 
 near_sdk::setup_alloc!();
 
@@ -39,7 +36,6 @@ pub struct Contract {
     type_authors: LookupMap<TokenType, AccountId>,
     tokens_by_type: LookupMap<TokenType, UnorderedSet<TokenId>>,
     type_price: LookupMap<TokenType, u128>,
-    type_balances: LookupMap<TypeOwnerId, Balance>,
     type_is_mintable: LookupMap<TokenType, bool>,
 }
 
@@ -59,7 +55,6 @@ enum StorageKey {
     TokensByTypeInner { token_type: String },
     TypePrice,
     TokensPerOwner { account_hash: Vec<u8> },
-    TypeBalances,
     TypeIsMintable,
 }
 
@@ -98,7 +93,6 @@ impl Contract {
             tokens_by_type: LookupMap::new(StorageKey::TokensByType),
             metadata: LazyOption::new(StorageKey::Metadata, Some(&metadata)),
             type_price: LookupMap::new(StorageKey::TypePrice),
-            type_balances: LookupMap::new(StorageKey::TypeBalances),
             type_is_mintable: LookupMap::new(StorageKey::TypeIsMintable),
         }
     }
@@ -245,17 +239,6 @@ impl Contract {
         } else {
             None
         };
-
-        let type_owner_id = format!("{}{}{}", token_type, TYPE_OWNERSHIP_DELIMTER, owner_id);
-        let owned_supply = self.type_balances.get(&type_owner_id);
-        if owned_supply.is_some() {
-            self.type_balances
-                .insert(&type_owner_id, &(owned_supply.unwrap() + 1));
-        } else {
-            self.type_balances.insert(&type_owner_id, &1);
-        }
-
-        
 
         let token_res = self.nft_token(token_id.clone()).unwrap();
 
@@ -411,7 +394,6 @@ impl Contract {
         let sender_id = env::predecessor_account_id();
         self.tokens
             .nft_transfer(receiver_id, token_id.clone(), approval_id, memo);
-        self.transfer_type_balance_calculation(&sender_id, token_id.clone(), &receiver_id_str);
         env::log(
             json!({
                 "type": "transfer",
@@ -440,7 +422,6 @@ impl Contract {
         let nft_transfer_call_ret =
             self.tokens
                 .nft_transfer_call(receiver_id, token_id.clone(), approval_id, memo, msg);
-        self.transfer_type_balance_calculation(&sender_id, token_id.clone(), &receiver_id_str);
         env::log(
             json!({
                 "type": "transfer",
@@ -454,41 +435,6 @@ impl Contract {
             .as_bytes(),
         );
         nft_transfer_call_ret
-    }
-
-    fn transfer_type_balance_calculation(
-        &mut self,
-        sender_id: &AccountId,
-        token_id: TokenId,
-        receiver_id: &AccountId,
-    ) {
-        let mut token_id_iter = token_id.split(TOKEN_DELIMETER);
-        let token_type: TokenType = token_id_iter.next().unwrap().parse().unwrap();
-
-        let type_sender_id = format!(
-            "{}{}{}",
-            token_type,
-            TYPE_OWNERSHIP_DELIMTER,
-            sender_id.clone()
-        );
-        let type_receiver_id = format!(
-            "{}{}{}",
-            token_type,
-            TYPE_OWNERSHIP_DELIMTER,
-            receiver_id.clone()
-        );
-
-        let supply_receiver = self.type_balances.get(&type_receiver_id);
-        let supply_sender = self.type_balances.get(&type_sender_id);
-
-        if supply_receiver.is_some() {
-            self.type_balances
-                .insert(&type_receiver_id, &(supply_receiver.unwrap() + 1));
-        } else {
-            self.type_balances.insert(&type_receiver_id, &1);
-        }
-        self.type_balances
-            .insert(&type_sender_id, &(supply_sender.unwrap() - 1));
     }
 
     // CUSTOM enumeration standard modified here because no macro below
@@ -525,16 +471,6 @@ impl Contract {
             .get(account_id.as_ref())
             .map(|account_tokens| U128::from(account_tokens.len() as u128))
             .unwrap_or(U128(0))
-    }
-
-    pub fn nft_type_balance(self, account_id: ValidAccountId, token_type: TokenType) -> U128 {
-        let type_owner_id = format!("{}{}{}", token_type, TYPE_OWNERSHIP_DELIMTER, account_id);
-        let bal = self.type_balances.get(&type_owner_id);
-        if bal.is_some() {
-            bal.unwrap().into()
-        } else {
-            U128(0)
-        }
     }
 
     pub fn nft_tokens_for_owner(
