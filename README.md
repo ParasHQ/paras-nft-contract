@@ -26,7 +26,7 @@ $ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --a
 
 ### Nft create type
 ```
-$ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_create_type '{"token_type":"naruto-2","author_id":"alice.test.near","token_metadata":{"title":"Naruto Shippuden ch.2: Menolong sasuke","media":"bafybeiax25bdn5go7b6xoc7kocfw3kbzng7ijnpemdo6aiogumzx53s6ga", "reference":"bafybeihvoofv5rkclwipij3rlozllrpyuc4wpcux6jve6o6qdbm4v7gepi"},"price":"1000000000000000000000000"}' --depositYocto 11790000000000000000000
+$ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_create_type '{"author_id":"alice.test.near","token_metadata":{"title":"Naruto Shippuden ch.2: Menolong sasuke","media":"bafybeidzcan4nzcz7sczs4yzyxly4galgygnbjewipj6haco4kffoqpkiy", "reference":"bafybeicg4ss7qh5odijfn2eogizuxkrdh3zlv4eftcmgnljwu7dm64uwji"},"price":"1000000000000000000000000"}' --depositYocto 11790000000000000000000
 ```
 
 ### Nft buy

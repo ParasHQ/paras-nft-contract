@@ -102,7 +102,6 @@ impl Contract {
     #[payable]
     pub fn nft_create_type(
         &mut self,
-        token_type: TokenType,
         token_metadata: TokenMetadata,
         author_id: ValidAccountId,
         price: U128,
@@ -113,6 +112,9 @@ impl Contract {
             owner_id, self.tokens.owner_id,
             "Paras: Only owner can set type"
         );
+
+        let token_type: String = format!(
+            "{}", (self.token_types.len() + 1));
 
         assert!(
             self.token_types.get(&token_type).is_none(),
@@ -546,7 +548,6 @@ fn refund_deposit(storage_used: u64, extra_spend: Balance) {
     );
 
     let refund = attached_deposit - required_cost;
-    // log!("refund_deposit amount {}", refund);
     if refund > 1 {
         Promise::new(env::predecessor_account_id()).transfer(refund);
     }
