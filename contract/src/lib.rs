@@ -64,6 +64,7 @@ enum StorageKey {
     // CUSTOM
     TokenTypeById,
     TokensByTypeInner { token_type: String },
+    TokensPerOwner { account_hash: Vec<u8> },
 }
 
 #[near_bindgen]
@@ -221,7 +222,28 @@ impl Contract {
             reference_hash: None, // Base64-encoded sha256 hash of JSON from reference field. Required if `reference` is included.
         });
 
-        let token = self.tokens.mint(token_id.clone(), receiver_id, metadata);
+        //let token = self.tokens.mint(token_id, receiver_id, metadata);
+        // From : https://github.com/near/near-sdk-rs/blob/master/near-contract-standards/src/non_fungible_token/core/core_impl.rs#L359
+        // This allows lazy minting
+
+        let owner_id: AccountId = receiver_id.into();
+        self.tokens.owner_by_id.insert(&token_id, &owner_id);
+
+        self.tokens
+            .token_metadata_by_id
+            .as_mut()
+            .and_then(|by_id| by_id.insert(&token_id, &metadata.as_ref().unwrap()));
+
+        if let Some(tokens_per_owner) = &mut self.tokens.tokens_per_owner {
+            let mut token_ids = tokens_per_owner.get(&owner_id).unwrap_or_else(|| {
+                UnorderedSet::new(StorageKey::TokensPerOwner {
+                    account_hash: env::sha256(&owner_id.as_bytes()),
+                })
+            });
+            token_ids.insert(&token_id);
+            tokens_per_owner.insert(&owner_id, &token_ids);
+        }
+
         let token_res = self.nft_token(token_id.clone()).unwrap();
 
         env::log(
@@ -230,7 +252,7 @@ impl Contract {
                 "params": {
                     "token_id": token_id,
                     "metadata": token_res.metadata,
-                    "owner_id": token.owner_id
+                    "owner_id": token_res.owner_id
                 }
             })
             .to_string()
@@ -239,9 +261,9 @@ impl Contract {
 
         Token {
             token_id,
-            owner_id: token.owner_id,
+            owner_id: token_res.owner_id,
             metadata: token_res.metadata,
-            approved_account_ids: token.approved_account_ids
+            approved_account_ids: token_res.approved_account_ids
         }
     }
 
