@@ -10,12 +10,11 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{LazyOption, UnorderedMap, UnorderedSet};
 use near_sdk::json_types::{ValidAccountId, U128, U64};
 use near_sdk::{
-    assert_one_yocto, log, env, near_bindgen, serde_json::json, AccountId, Balance, BorshStorageKey,
+    assert_one_yocto, env, near_bindgen, serde_json::json, AccountId, Balance, BorshStorageKey,
     PanicOnDefault, Promise, PromiseOrValue,
 };
 use near_sdk::serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::convert::TryFrom;
 
 /// between token_type_id and edition number e.g. 42:2 where 42 is type and 2 is edition
 pub const TOKEN_DELIMETER: char = ':';
@@ -53,7 +52,7 @@ pub struct Contract {
 	token_type_by_id: UnorderedMap<TokenTypeId, TokenType>,
 }
 
-const DATA_IMAGE_SVG_NEAR_ICON: &str = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 288 288'%3E%3Cg id='l' data-name='l'%3E%3Cpath d='M187.58,79.81l-30.1,44.69a3.2,3.2,0,0,0,4.75,4.2L191.86,103a1.2,1.2,0,0,1,2,.91v80.46a1.2,1.2,0,0,1-2.12.77L102.18,77.93A15.35,15.35,0,0,0,90.47,72.5H87.34A15.34,15.34,0,0,0,72,87.84V201.16A15.34,15.34,0,0,0,87.34,216.5h0a15.35,15.35,0,0,0,13.08-7.31l30.1-44.69a3.2,3.2,0,0,0-4.75-4.2L96.14,186a1.2,1.2,0,0,1-2-.91V104.61a1.2,1.2,0,0,1,2.12-.77l89.55,107.23a15.35,15.35,0,0,0,11.71,5.43h3.13A15.34,15.34,0,0,0,216,201.16V87.84A15.34,15.34,0,0,0,200.66,72.5h0A15.35,15.35,0,0,0,187.58,79.81Z'/%3E%3C/g%3E%3C/svg%3E";
+const DATA_IMAGE_SVG_COMIC_ICON: &str = "data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 79C5.02944 79 1 74.9706 1 70V10C1 5.02944 5.02944 1 10 1H71C75.4183 1 79 4.58172 79 9V70C79 74.9706 74.9706 79 70 79H10Z' fill='%2318162B' stroke='%23C6FF00' stroke-width='2'/%3E%3Cpath d='M71 0L77 3L80 9H71V0Z' fill='%23C6FF00'/%3E%3Cpath d='M9 80L3.5 76.5L0 71H9V80Z' fill='%23C6FF00'/%3E%3Cpath d='M40.7745 64C35.0045 64 30.433 62.3846 27.0598 59.1538C23.6866 55.8782 22 51.2115 22 45.1538V33.8462C22 27.7885 23.6866 23.1442 27.0598 19.9135C30.433 16.6378 35.0045 15 40.7745 15C46.5 15 50.9162 16.5929 54.0231 19.7788C57.1744 22.9199 58.75 27.25 58.75 32.7692V33.1731H50.0951V32.5C50.0951 29.7179 49.3184 27.4295 47.7649 25.6346C46.2559 23.8397 43.9257 22.9423 40.7745 22.9423C37.6676 22.9423 35.2264 23.9071 33.4511 25.8365C31.6757 27.766 30.788 30.391 30.788 33.7115V45.2885C30.788 48.5641 31.6757 51.1891 33.4511 53.1635C35.2264 55.0929 37.6676 56.0577 40.7745 56.0577C43.9257 56.0577 46.2559 55.1603 47.7649 53.3654C49.3184 51.5256 50.0951 49.2372 50.0951 46.5V45.2885H58.75V46.2308C58.75 51.75 57.1744 56.1026 54.0231 59.2885C50.9162 62.4295 46.5 64 40.7745 64Z' fill='%23C6FF00'/%3E%3C/svg%3E";
 
 #[derive(BorshSerialize, BorshStorageKey)]
 enum StorageKey {
@@ -65,6 +64,7 @@ enum StorageKey {
     // CUSTOM
     TokenTypeById,
     TokensByTypeInner { token_type: String },
+    TokensPerOwner { account_hash: Vec<u8> },
 }
 
 #[near_bindgen]
@@ -77,7 +77,7 @@ impl Contract {
                 spec: NFT_METADATA_SPEC.to_string(),
                 name: "Comic by Paras".to_string(),
                 symbol: "COMIC".to_string(),
-                icon: Some(DATA_IMAGE_SVG_NEAR_ICON.to_string()),
+                icon: Some(DATA_IMAGE_SVG_COMIC_ICON.to_string()),
                 base_uri: Some("https://ipfs.fleek.co/ipfs".to_string()),
                 reference: None,
                 reference_hash: None,
@@ -198,6 +198,10 @@ impl Contract {
             "Paras: Token type is not mintable"
         );
 
+        let num_tokens = token_type_res.tokens.len();
+        let max_copies = token_type_res.metadata.copies.unwrap_or(u64::MAX);
+        assert_ne!(num_tokens, max_copies, "Type supply maxed");
+
         let token_id = format!("{}{}{}", &token_type, TOKEN_DELIMETER, token_type_res.tokens.len() + 1);
         token_type_res.tokens.insert(&token_id);
         self.token_type_by_id.insert(&token_type, &token_type_res);
@@ -218,7 +222,28 @@ impl Contract {
             reference_hash: None, // Base64-encoded sha256 hash of JSON from reference field. Required if `reference` is included.
         });
 
-        let token = self.tokens.mint(token_id.clone(), receiver_id, metadata);
+        //let token = self.tokens.mint(token_id, receiver_id, metadata);
+        // From : https://github.com/near/near-sdk-rs/blob/master/near-contract-standards/src/non_fungible_token/core/core_impl.rs#L359
+        // This allows lazy minting
+
+        let owner_id: AccountId = receiver_id.into();
+        self.tokens.owner_by_id.insert(&token_id, &owner_id);
+
+        self.tokens
+            .token_metadata_by_id
+            .as_mut()
+            .and_then(|by_id| by_id.insert(&token_id, &metadata.as_ref().unwrap()));
+
+        if let Some(tokens_per_owner) = &mut self.tokens.tokens_per_owner {
+            let mut token_ids = tokens_per_owner.get(&owner_id).unwrap_or_else(|| {
+                UnorderedSet::new(StorageKey::TokensPerOwner {
+                    account_hash: env::sha256(&owner_id.as_bytes()),
+                })
+            });
+            token_ids.insert(&token_id);
+            tokens_per_owner.insert(&owner_id, &token_ids);
+        }
+
         let token_res = self.nft_token(token_id.clone()).unwrap();
 
         env::log(
@@ -227,7 +252,7 @@ impl Contract {
                 "params": {
                     "token_id": token_id,
                     "metadata": token_res.metadata,
-                    "owner_id": token.owner_id
+                    "owner_id": token_res.owner_id
                 }
             })
             .to_string()
@@ -236,9 +261,9 @@ impl Contract {
 
         Token {
             token_id,
-            owner_id: token.owner_id,
+            owner_id: token_res.owner_id,
             metadata: token_res.metadata,
-            approved_account_ids: token.approved_account_ids
+            approved_account_ids: token_res.approved_account_ids
         }
     }
 
@@ -246,14 +271,84 @@ impl Contract {
     pub fn nft_set_type_mintable(&mut self, token_type: TokenTypeId, is_mintable: bool) {
         assert_one_yocto();
 
+        let mut token_type_res = self.token_type_by_id.get(&token_type).expect("Token type not exist");
         assert_eq!(
             env::predecessor_account_id(),
-            self.tokens.owner_id,
-            "Paras: Owner only"
+            token_type_res.author_id,
+            "Paras: Author only"
         );
-        let mut token_type_res = self.token_type_by_id.get(&token_type).unwrap();
         token_type_res.is_mintable = is_mintable;
         self.token_type_by_id.insert(&token_type, &token_type_res);
+    }
+
+    #[payable]
+    pub fn nft_set_type_price(&mut self, token_type: TokenTypeId, price: U128) -> U128 {
+        assert_one_yocto();
+
+        let mut token_type_res = self.token_type_by_id.get(&token_type).expect("Token type not exist");
+        assert_eq!(
+            env::predecessor_account_id(),
+            token_type_res.author_id,
+            "Paras: Author only"
+        );
+
+        token_type_res.price = price.into();
+        self.token_type_by_id.insert(&token_type, &token_type_res);
+        env::log(
+            json!({
+                "type": "set_type_price",
+                "params": {
+                    "token_type": token_type,
+                    "price": price
+                }
+            })
+            .to_string()
+            .as_bytes(),
+        );
+        return token_type_res.price.into();
+    }
+
+    #[payable]
+    pub fn nft_burn(&mut self, token_id: TokenId) {
+        assert_one_yocto();
+
+        let owner_id = self.tokens.owner_by_id.get(&token_id).unwrap();
+        assert_eq!(
+            owner_id,
+            env::predecessor_account_id(),
+            "Token owner only"
+        );
+
+        if let Some(next_approval_id_by_id) = &mut self.tokens.next_approval_id_by_id {
+            next_approval_id_by_id.remove(&token_id);
+        }
+
+        if let Some(approvals_by_id) = &mut self.tokens.approvals_by_id {
+            approvals_by_id.remove(&token_id);
+        }
+
+        if let Some(tokens_per_owner) = &mut self.tokens.tokens_per_owner {
+            let mut token_ids = tokens_per_owner.get(&owner_id).unwrap();
+            token_ids.remove(&token_id);
+            tokens_per_owner.insert(&owner_id, &token_ids);
+        }
+
+        if let Some(token_metadata_by_id) = &mut self.tokens.token_metadata_by_id {
+            token_metadata_by_id.remove(&token_id);
+        }
+
+        self.tokens.owner_by_id.remove(&token_id);
+        env::log(
+            json!({
+                "type": "burn",
+                "params": {
+                    "token_id": token_id,
+                    "owner_id": owner_id,
+                }
+            })
+            .to_string()
+            .as_bytes(),
+        );
     }
 
     // CUSTOM VIEWS
