@@ -198,6 +198,10 @@ impl Contract {
             "Paras: Token type is not mintable"
         );
 
+        let num_tokens = token_type_res.tokens.len();
+        let max_copies = token_type_res.metadata.copies.unwrap_or(u64::MAX);
+        assert_ne!(num_tokens, max_copies, "Type supply maxed");
+
         let token_id = format!("{}{}{}", &token_type, TOKEN_DELIMETER, token_type_res.tokens.len() + 1);
         token_type_res.tokens.insert(&token_id);
         self.token_type_by_id.insert(&token_type, &token_type_res);
