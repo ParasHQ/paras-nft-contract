@@ -52,7 +52,7 @@ pub struct Contract {
 	token_type_by_id: UnorderedMap<TokenTypeId, TokenType>,
 }
 
-const DATA_IMAGE_SVG_NEAR_ICON: &str = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 288 288'%3E%3Cg id='l' data-name='l'%3E%3Cpath d='M187.58,79.81l-30.1,44.69a3.2,3.2,0,0,0,4.75,4.2L191.86,103a1.2,1.2,0,0,1,2,.91v80.46a1.2,1.2,0,0,1-2.12.77L102.18,77.93A15.35,15.35,0,0,0,90.47,72.5H87.34A15.34,15.34,0,0,0,72,87.84V201.16A15.34,15.34,0,0,0,87.34,216.5h0a15.35,15.35,0,0,0,13.08-7.31l30.1-44.69a3.2,3.2,0,0,0-4.75-4.2L96.14,186a1.2,1.2,0,0,1-2-.91V104.61a1.2,1.2,0,0,1,2.12-.77l89.55,107.23a15.35,15.35,0,0,0,11.71,5.43h3.13A15.34,15.34,0,0,0,216,201.16V87.84A15.34,15.34,0,0,0,200.66,72.5h0A15.35,15.35,0,0,0,187.58,79.81Z'/%3E%3C/g%3E%3C/svg%3E";
+const DATA_IMAGE_SVG_COMIC_ICON: &str = "data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 79C5.02944 79 1 74.9706 1 70V10C1 5.02944 5.02944 1 10 1H71C75.4183 1 79 4.58172 79 9V70C79 74.9706 74.9706 79 70 79H10Z' fill='%2318162B' stroke='%23C6FF00' stroke-width='2'/%3E%3Cpath d='M71 0L77 3L80 9H71V0Z' fill='%23C6FF00'/%3E%3Cpath d='M9 80L3.5 76.5L0 71H9V80Z' fill='%23C6FF00'/%3E%3Cpath d='M40.7745 64C35.0045 64 30.433 62.3846 27.0598 59.1538C23.6866 55.8782 22 51.2115 22 45.1538V33.8462C22 27.7885 23.6866 23.1442 27.0598 19.9135C30.433 16.6378 35.0045 15 40.7745 15C46.5 15 50.9162 16.5929 54.0231 19.7788C57.1744 22.9199 58.75 27.25 58.75 32.7692V33.1731H50.0951V32.5C50.0951 29.7179 49.3184 27.4295 47.7649 25.6346C46.2559 23.8397 43.9257 22.9423 40.7745 22.9423C37.6676 22.9423 35.2264 23.9071 33.4511 25.8365C31.6757 27.766 30.788 30.391 30.788 33.7115V45.2885C30.788 48.5641 31.6757 51.1891 33.4511 53.1635C35.2264 55.0929 37.6676 56.0577 40.7745 56.0577C43.9257 56.0577 46.2559 55.1603 47.7649 53.3654C49.3184 51.5256 50.0951 49.2372 50.0951 46.5V45.2885H58.75V46.2308C58.75 51.75 57.1744 56.1026 54.0231 59.2885C50.9162 62.4295 46.5 64 40.7745 64Z' fill='%23C6FF00'/%3E%3C/svg%3E";
 
 #[derive(BorshSerialize, BorshStorageKey)]
 enum StorageKey {
@@ -77,7 +77,7 @@ impl Contract {
                 spec: NFT_METADATA_SPEC.to_string(),
                 name: "Comic by Paras".to_string(),
                 symbol: "COMIC".to_string(),
-                icon: Some(DATA_IMAGE_SVG_NEAR_ICON.to_string()),
+                icon: Some(DATA_IMAGE_SVG_COMIC_ICON.to_string()),
                 base_uri: Some("https://ipfs.fleek.co/ipfs".to_string()),
                 reference: None,
                 reference_hash: None,
