@@ -249,12 +249,12 @@ impl Contract {
     pub fn nft_set_type_mintable(&mut self, token_type: TokenTypeId, is_mintable: bool) {
         assert_one_yocto();
 
+        let mut token_type_res = self.token_type_by_id.get(&token_type).expect("Token type not exist");
         assert_eq!(
             env::predecessor_account_id(),
-            self.tokens.owner_id,
-            "Paras: Owner only"
+            token_type_res.author_id,
+            "Paras: Author only"
         );
-        let mut token_type_res = self.token_type_by_id.get(&token_type).unwrap();
         token_type_res.is_mintable = is_mintable;
         self.token_type_by_id.insert(&token_type, &token_type_res);
     }
