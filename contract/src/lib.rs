@@ -10,12 +10,11 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{LazyOption, UnorderedMap, UnorderedSet};
 use near_sdk::json_types::{ValidAccountId, U128, U64};
 use near_sdk::{
-    assert_one_yocto, log, env, near_bindgen, serde_json::json, AccountId, Balance, BorshStorageKey,
+    assert_one_yocto, env, near_bindgen, serde_json::json, AccountId, Balance, BorshStorageKey,
     PanicOnDefault, Promise, PromiseOrValue,
 };
 use near_sdk::serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::convert::TryFrom;
 
 /// between token_type_id and edition number e.g. 42:2 where 42 is type and 2 is edition
 pub const TOKEN_DELIMETER: char = ':';
@@ -258,6 +257,33 @@ impl Contract {
         let mut token_type_res = self.token_type_by_id.get(&token_type).unwrap();
         token_type_res.is_mintable = is_mintable;
         self.token_type_by_id.insert(&token_type, &token_type_res);
+    }
+
+    #[payable]
+    pub fn nft_set_type_price(&mut self, token_type: TokenTypeId, price: U128) -> U128 {
+        assert_one_yocto();
+
+        let mut token_type_res = self.token_type_by_id.get(&token_type).expect("Token type not exist");
+        assert_eq!(
+            env::predecessor_account_id(),
+            token_type_res.author_id,
+            "Paras: Author only"
+        );
+
+        token_type_res.price = price.into();
+        self.token_type_by_id.insert(&token_type, &token_type_res);
+        env::log(
+            json!({
+                "type": "set_type_price",
+                "params": {
+                    "token_type": token_type,
+                    "price": price
+                }
+            })
+            .to_string()
+            .as_bytes(),
+        );
+        return token_type_res.price.into();
     }
 
     // CUSTOM VIEWS
