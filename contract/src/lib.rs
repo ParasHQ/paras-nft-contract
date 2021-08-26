@@ -7,13 +7,15 @@ use near_contract_standards::non_fungible_token::metadata::{
 use near_contract_standards::non_fungible_token::NonFungibleToken;
 use near_contract_standards::non_fungible_token::{Token, TokenId};
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::collections::{LazyOption, LookupMap, UnorderedMap, UnorderedSet};
+use near_sdk::collections::{LazyOption, UnorderedMap, UnorderedSet};
 use near_sdk::json_types::{ValidAccountId, U128, U64};
 use near_sdk::{
-    assert_one_yocto, env, near_bindgen, serde_json::json, AccountId, Balance, BorshStorageKey,
+    assert_one_yocto, log, env, near_bindgen, serde_json::json, AccountId, Balance, BorshStorageKey,
     PanicOnDefault, Promise, PromiseOrValue,
 };
+use near_sdk::serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::convert::TryFrom;
 
 /// between token_type_id and edition number e.g. 42:2 where 42 is type and 2 is edition
 pub const TOKEN_DELIMETER: char = ':';
@@ -22,7 +24,23 @@ pub const TITLE_DELIMETER: &str = " #";
 /// e.g. "Title — 2/10" where 10 is max copies
 pub const EDITION_DELIMETER: &str = "/";
 
-pub type TokenType = String;
+pub type TokenTypeId = String;
+
+#[derive(BorshDeserialize, BorshSerialize)]
+pub struct TokenType {
+	metadata: TokenMetadata,
+	author_id: AccountId,
+	tokens: UnorderedSet<TokenId>,
+    price: Balance,
+    is_mintable: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct TokenTypeJson {
+	metadata: TokenMetadata,
+	author_id: AccountId,
+}
 
 near_sdk::setup_alloc!();
 
@@ -32,11 +50,7 @@ pub struct Contract {
     tokens: NonFungibleToken,
     metadata: LazyOption<NFTContractMetadata>,
     // CUSTOM
-    token_types: UnorderedMap<TokenType, TokenMetadata>,
-    type_authors: LookupMap<TokenType, AccountId>,
-    tokens_by_type: LookupMap<TokenType, UnorderedSet<TokenId>>,
-    type_price: LookupMap<TokenType, u128>,
-    type_is_mintable: LookupMap<TokenType, bool>,
+	token_type_by_id: UnorderedMap<TokenTypeId, TokenType>,
 }
 
 const DATA_IMAGE_SVG_NEAR_ICON: &str = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 288 288'%3E%3Cg id='l' data-name='l'%3E%3Cpath d='M187.58,79.81l-30.1,44.69a3.2,3.2,0,0,0,4.75,4.2L191.86,103a1.2,1.2,0,0,1,2,.91v80.46a1.2,1.2,0,0,1-2.12.77L102.18,77.93A15.35,15.35,0,0,0,90.47,72.5H87.34A15.34,15.34,0,0,0,72,87.84V201.16A15.34,15.34,0,0,0,87.34,216.5h0a15.35,15.35,0,0,0,13.08-7.31l30.1-44.69a3.2,3.2,0,0,0-4.75-4.2L96.14,186a1.2,1.2,0,0,1-2-.91V104.61a1.2,1.2,0,0,1,2.12-.77l89.55,107.23a15.35,15.35,0,0,0,11.71,5.43h3.13A15.34,15.34,0,0,0,216,201.16V87.84A15.34,15.34,0,0,0,200.66,72.5h0A15.35,15.35,0,0,0,187.58,79.81Z'/%3E%3C/g%3E%3C/svg%3E";
@@ -49,13 +63,8 @@ enum StorageKey {
     Enumeration,
     Approval,
     // CUSTOM
-    TokenTypes,
-    TypeAuthors,
-    TokensByType,
+    TokenTypeById,
     TokensByTypeInner { token_type: String },
-    TypePrice,
-    TokensPerOwner { account_hash: Vec<u8> },
-    TypeIsMintable,
 }
 
 #[near_bindgen]
@@ -88,12 +97,8 @@ impl Contract {
                 Some(StorageKey::Enumeration),
                 Some(StorageKey::Approval),
             ),
-            token_types: UnorderedMap::new(StorageKey::TokenTypes),
-            type_authors: LookupMap::new(StorageKey::TypeAuthors),
-            tokens_by_type: LookupMap::new(StorageKey::TokensByType),
+            token_type_by_id: UnorderedMap::new(StorageKey::TokenTypeById),
             metadata: LazyOption::new(StorageKey::Metadata, Some(&metadata)),
-            type_price: LookupMap::new(StorageKey::TypePrice),
-            type_is_mintable: LookupMap::new(StorageKey::TypeIsMintable),
         }
     }
 
@@ -114,30 +119,29 @@ impl Contract {
         );
 
         let token_type: String = format!(
-            "{}", (self.token_types.len() + 1));
+            "{}", (self.token_type_by_id.len() + 1));
 
         assert!(
-            self.token_types.get(&token_type).is_none(),
+            self.token_type_by_id.get(&token_type).is_none(),
             "Paras: duplicate token_type"
         );
 
         let title = token_metadata.title.clone();
         assert!(title.is_some(), "token_metadata.title is required");
 
-        self.token_types.insert(&token_type, &token_metadata);
-        self.type_authors.insert(&token_type, &author_id.to_string());
-        self.tokens_by_type.insert(
-            &token_type,
-            &UnorderedSet::new(
+        self.token_type_by_id.insert(&token_type, &TokenType{
+            metadata: token_metadata.clone(),
+            author_id: author_id.to_string(),
+            tokens: UnorderedSet::new(
                 StorageKey::TokensByTypeInner {
                     token_type: token_type.clone(),
                 }
                 .try_to_vec()
                 .unwrap(),
             ),
-        );
-        self.type_price.insert(&token_type, &price.into());
-        self.type_is_mintable.insert(&token_type, &true);
+            price: price.into(),
+            is_mintable: true,
+        });
 
         env::log(
             json!({
@@ -157,11 +161,11 @@ impl Contract {
     }
 
     #[payable]
-    pub fn nft_buy(&mut self, token_type: TokenType, receiver_id: ValidAccountId) -> Token {
+    pub fn nft_buy(&mut self, token_type: TokenTypeId, receiver_id: ValidAccountId) -> Token {
         let initial_storage_usage = env::storage_usage();
 
-        let type_author = self.type_authors.get(&token_type).expect("no type owner");
-        let price: u128 = self.type_price.get(&token_type).unwrap();
+        let token_type_res = self.token_type_by_id.get(&token_type).expect("Token type not exist");
+        let price: u128 = token_type_res.price;
         let attached_deposit = env::attached_deposit();
         assert!(
             attached_deposit >= price,
@@ -169,37 +173,34 @@ impl Contract {
             price
         );
         let token: Token = self._nft_mint_type(token_type, receiver_id);
-        Promise::new(type_author).transfer(price);
+        Promise::new(token_type_res.author_id).transfer(price);
 
         refund_deposit(env::storage_usage() - initial_storage_usage, price);
         token
     }
 
     #[payable]
-    pub fn nft_mint_type(&mut self, token_type: TokenType, receiver_id: ValidAccountId) -> Token {
+    pub fn nft_mint_type(&mut self, token_type: TokenTypeId, receiver_id: ValidAccountId) -> Token {
         let initial_storage_usage = env::storage_usage();
 
-        let type_author = self.type_authors.get(&token_type).expect("no type owner");
-        assert_eq!(env::predecessor_account_id(), type_author, "not type owner");
+        let token_type_res = self.token_type_by_id.get(&token_type).expect("Token type not exist");
+        assert_eq!(env::predecessor_account_id(), token_type_res.author_id, "not type owner");
         let token: Token = self._nft_mint_type(token_type, receiver_id);
 
         refund_deposit(env::storage_usage() - initial_storage_usage, 0);
         token
     }
 
-    fn _nft_mint_type(&mut self, token_type: TokenType, receiver_id: ValidAccountId) -> Token {
-        assert_eq!(
-            self.type_is_mintable.get(&token_type).unwrap(),
-            true,
+    fn _nft_mint_type(&mut self, token_type: TokenTypeId, receiver_id: ValidAccountId) -> Token {
+        let mut token_type_res = self.token_type_by_id.get(&token_type).expect("Token type not exist");
+        assert!(
+            token_type_res.is_mintable,
             "Paras: Token type is not mintable"
         );
 
-        let mut tokens_by_type = self.tokens_by_type.get(&token_type).unwrap();
-        let num_tokens = tokens_by_type.len();
-
-        let token_id = format!("{}{}{}", &token_type, TOKEN_DELIMETER, num_tokens + 1);
-        tokens_by_type.insert(&token_id);
-        self.tokens_by_type.insert(&token_type, &tokens_by_type);
+        let token_id = format!("{}{}{}", &token_type, TOKEN_DELIMETER, token_type_res.tokens.len() + 1);
+        token_type_res.tokens.insert(&token_id);
+        self.token_type_by_id.insert(&token_type, &token_type_res);
 
         // you can add custom metadata to each token here
         let metadata = Some(TokenMetadata {
@@ -216,32 +217,8 @@ impl Contract {
             reference: None, // URL to an off-chain JSON file with more info.
             reference_hash: None, // Base64-encoded sha256 hash of JSON from reference field. Required if `reference` is included.
         });
-        //let token = self.tokens.mint(token_id, receiver_id, metadata);
-        // From : https://github.com/near/near-sdk-rs/blob/master/near-contract-standards/src/non_fungible_token/core/core_impl.rs#L359
-        let owner_id: AccountId = receiver_id.into();
-        self.tokens.owner_by_id.insert(&token_id, &owner_id);
 
-        self.tokens
-            .token_metadata_by_id
-            .as_mut()
-            .and_then(|by_id| by_id.insert(&token_id, &metadata.as_ref().unwrap()));
-
-        if let Some(tokens_per_owner) = &mut self.tokens.tokens_per_owner {
-            let mut token_ids = tokens_per_owner.get(&owner_id).unwrap_or_else(|| {
-                UnorderedSet::new(StorageKey::TokensPerOwner {
-                    account_hash: env::sha256(&owner_id.as_bytes()),
-                })
-            });
-            token_ids.insert(&token_id);
-            tokens_per_owner.insert(&owner_id, &token_ids);
-        }
-
-        let approved_account_ids = if self.tokens.approvals_by_id.is_some() {
-            Some(HashMap::new())
-        } else {
-            None
-        };
-
+        let token = self.tokens.mint(token_id.clone(), receiver_id, metadata);
         let token_res = self.nft_token(token_id.clone()).unwrap();
 
         env::log(
@@ -250,7 +227,7 @@ impl Contract {
                 "params": {
                     "token_id": token_id,
                     "metadata": token_res.metadata,
-                    "owner_id": owner_id
+                    "owner_id": token.owner_id
                 }
             })
             .to_string()
@@ -259,14 +236,130 @@ impl Contract {
 
         Token {
             token_id,
-            owner_id,
+            owner_id: token.owner_id,
             metadata: token_res.metadata,
-            approved_account_ids,
+            approved_account_ids: token.approved_account_ids
         }
     }
 
+    pub fn measure_create_type_storage_cost(&mut self) {
+        let initial_storage_usage = env::storage_usage();
+
+        let owner_id = env::predecessor_account_id();
+        assert_eq!(
+            owner_id, self.tokens.owner_id,
+            "Paras: Only owner can set type"
+        );
+
+        // Dummy data, maximum
+
+        let token_type = "a".repeat(64);
+        let price: U128 = 1000000000000000000000000.into();
+        let author_id: AccountId = "a".repeat(64);
+        let token_metadata = TokenMetadata {
+            title: Some("a".repeat(64)),
+            description: None,
+            media: Some("a".repeat(64)),
+            media_hash: None,
+            copies: None,
+            issued_at: None,
+            expires_at: None,
+            starts_at: None,
+            updated_at: None,
+            extra: None,
+            reference: Some("a".repeat(64)),
+            reference_hash: None,
+        };
+
+        let title = token_metadata.title.clone();
+        assert!(title.is_some(), "token_metadata.title is required");
+
+        self.token_type_by_id.insert(&token_type, &TokenType{
+            metadata: token_metadata,
+            author_id: author_id.to_string(),
+            tokens: UnorderedSet::new(
+                StorageKey::TokensByTypeInner {
+                    token_type: token_type.clone(),
+                }
+                .try_to_vec()
+                .unwrap(),
+            ),
+            price: price.into(),
+            is_mintable: true,
+        });
+
+        let extra_storage_per_type = env::storage_usage() - initial_storage_usage;
+        log!("Extra storage : {}", extra_storage_per_type);
+        log!("Extra storage price : {}", Balance::from(extra_storage_per_type) * env::storage_byte_cost());
+        
+        //self.token_type_by_id.remove(&token_type);
+    }
+
     #[payable]
-    pub fn nft_set_type_mintable(&mut self, token_type: TokenType, is_mintable: bool) {
+    pub fn measure_mint_storage_cost(&mut self) {
+        let initial_storage_usage = env::storage_usage();
+
+        let owner_id = env::predecessor_account_id();
+        assert_eq!(
+            owner_id, self.tokens.owner_id,
+            "Paras: Only owner can measure"
+        );
+
+        // Dummy
+        let token_type = "a".repeat(64);
+        let receiver_id: AccountId = "b".repeat(64);
+
+        let mut token_type_res = self.token_type_by_id.get(&token_type).unwrap();
+        let num_tokens = token_type_res.tokens.len();
+
+        let token_id = format!("{}{}{}", &token_type, TOKEN_DELIMETER, num_tokens + 1);
+        token_type_res.tokens.insert(&token_id);
+        self.token_type_by_id.insert(&token_type, &token_type_res);
+
+        // you can add custom metadata to each token here
+        let metadata = Some(TokenMetadata {
+            title: None,          // ex. "Arch Nemesis: Mail Carrier" or "Parcel #5055"
+            description: None,    // free-form description
+            media: None, // URL to associated media, preferably to decentralized, content-addressed storage
+            media_hash: None, // Base64-encoded sha256 hash of content referenced by the `media` field. Required if `media` is included.
+            copies: None, // number of copies of this set of metadata in existence when token was minted.
+            issued_at: None, // ISO 8601 datetime when token was issued or minted
+            expires_at: None, // ISO 8601 datetime when token expires
+            starts_at: None, // ISO 8601 datetime when token starts being valid
+            updated_at: None, // ISO 8601 datetime when token was last updated
+            extra: None, // anything extra the NFT wants to store on-chain. Can be stringified JSON.
+            reference: None, // URL to an off-chain JSON file with more info.
+            reference_hash: None, // Base64-encoded sha256 hash of JSON from reference field. Required if `reference` is included.
+        });
+
+        let owner_id: AccountId = receiver_id;
+        self.tokens.mint(token_id.clone(), ValidAccountId::try_from(owner_id.as_str()).unwrap(), metadata);
+
+        let extra_storage_per_type = env::storage_usage() - initial_storage_usage;
+        log!("Extra storage : {}", extra_storage_per_type);
+        log!("Extra storage price : {}", Balance::from(extra_storage_per_type) * env::storage_byte_cost());
+
+
+        if let Some(next_approval_id_by_id) = &mut self.tokens.next_approval_id_by_id {
+            next_approval_id_by_id.remove(&token_id);
+        }
+        if let Some(approvals_by_id) = &mut self.tokens.approvals_by_id {
+            approvals_by_id.remove(&token_id);
+        }
+        if let Some(tokens_per_owner) = &mut self.tokens.tokens_per_owner {
+            tokens_per_owner.remove(&owner_id);
+        }
+        if let Some(token_metadata_by_id) = &mut self.tokens.token_metadata_by_id {
+            token_metadata_by_id.remove(&token_id);
+        }
+        if let Some(tokens_per_owner) = &mut self.tokens.tokens_per_owner {
+            tokens_per_owner.remove(&owner_id);
+        }
+        self.tokens.owner_by_id.remove(&token_id);
+    }
+
+    #[payable]
+    pub fn nft_set_type_mintable(&mut self, token_type: TokenTypeId, is_mintable: bool) {
         assert_one_yocto();
 
         assert_eq!(
@@ -274,73 +367,65 @@ impl Contract {
             self.tokens.owner_id,
             "Paras: Owner only"
         );
-        self.type_is_mintable.insert(&token_type, &is_mintable);
+        let mut token_type_res = self.token_type_by_id.get(&token_type).unwrap();
+        token_type_res.is_mintable = is_mintable;
+        self.token_type_by_id.insert(&token_type, &token_type_res);
     }
 
     // CUSTOM VIEWS
 
-    pub fn nft_get_type_info(
-        self,
-        token_type: TokenType,
-    ) -> (TokenType, AccountId, TokenMetadata, bool) {
-        (
-            token_type.clone(),
-            self.type_authors.get(&token_type).unwrap(),
-            self.token_types.get(&token_type).unwrap(),
-            self.type_is_mintable.get(&token_type).unwrap(),
-        )
-    }
+	pub fn nft_get_type(&self, token_type: TokenTypeId) -> TokenTypeJson {
+		let token_type = self.token_type_by_id.get(&token_type).expect("no type");
+		TokenTypeJson{
+			metadata: token_type.metadata,
+			author_id: token_type.author_id,
+		}
+	}
 
     pub fn nft_get_type_format(self) -> (char, &'static str, &'static str) {
         (TOKEN_DELIMETER, TITLE_DELIMETER, EDITION_DELIMETER)
     }
 
-    pub fn nft_get_type(self, token_type: TokenType) -> TokenMetadata {
-        self.token_types.get(&token_type).unwrap()
-    }
-
-    pub fn nft_get_price(self, token_type: TokenType) -> u128 {
-        self.type_price.get(&token_type).unwrap()
+    pub fn nft_get_price(self, token_type: TokenTypeId) -> Balance {
+        self.token_type_by_id.get(&token_type).unwrap().price
     }
 
     pub fn nft_get_types(
         &self,
         from_index: Option<U128>,
         limit: Option<u64>,
-    ) -> Vec<TokenMetadata> {
+    ) -> Vec<TokenTypeJson> {
         let start_index: u128 = from_index.map(From::from).unwrap_or_default();
         assert!(
-            (self.token_types.len() as u128) > start_index,
+            (self.token_type_by_id.len() as u128) > start_index,
             "Out of bounds, please use a smaller from_index."
         );
         let limit = limit.map(|v| v as usize).unwrap_or(usize::MAX);
         assert_ne!(limit, 0, "Cannot provide limit of 0.");
 
-        self.token_types
+        self.token_type_by_id
             .iter()
             .skip(start_index as usize)
             .take(limit)
-            .map(|(_, token_metadata)| token_metadata)
+            .map(|(_, token_type)| TokenTypeJson{
+                metadata: token_type.metadata,
+                author_id: token_type.author_id,
+            })
             .collect()
     }
 
-    pub fn nft_supply_for_type(&self, token_type: TokenType) -> U64 {
-        let tokens_by_type = self.tokens_by_type.get(&token_type);
-        if let Some(tokens_by_type) = tokens_by_type {
-            U64(tokens_by_type.len())
-        } else {
-            U64(0)
-        }
+    pub fn nft_supply_for_type(&self, token_type: TokenTypeId) -> U64 {
+        self.token_type_by_id.get(&token_type).expect("Token type not exist").tokens.len().into()
     }
 
     pub fn nft_tokens_by_type(
         &self,
-        token_type: TokenType,
+        token_type: TokenTypeId,
         from_index: Option<U128>,
         limit: Option<u64>,
     ) -> Vec<Token> {
         let start_index: u128 = from_index.map(From::from).unwrap_or_default();
-        let tokens = self.tokens_by_type.get(&token_type).unwrap();
+        let tokens = self.token_type_by_id.get(&token_type).unwrap().tokens;
         assert!(
             (tokens.len() as u128) > start_index,
             "Out of bounds, please use a smaller from_index."
@@ -367,7 +452,7 @@ impl Contract {
         // CUSTOM (switch metadata for the token_type metadata)
         let mut token_id_iter = token_id.split(TOKEN_DELIMETER);
         let token_type = token_id_iter.next().unwrap().parse().unwrap();
-        let mut metadata = self.token_types.get(&token_type).unwrap();
+        let mut metadata = self.token_type_by_id.get(&token_type).unwrap().metadata;
         metadata.title = Some(format!(
             "{}{}{}",
             metadata.title.unwrap(),
