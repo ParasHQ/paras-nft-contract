@@ -252,11 +252,11 @@ impl Contract {
 
         env::log(
             json!({
-                "type": "mint",
+                "type": "nft_transfer",
                 "params": {
                     "token_id": token_id,
-                    "metadata": token_res.metadata,
-                    "owner_id": token_res.owner_id
+                    "sender_id": "",
+                    "receiver_id": owner_id,
                 }
             })
             .to_string()
@@ -351,10 +351,11 @@ impl Contract {
         self.tokens.owner_by_id.remove(&token_id);
         env::log(
             json!({
-                "type": "burn",
+                "type": "nft_transfer",
                 "params": {
                     "token_id": token_id,
-                    "owner_id": owner_id,
+                    "sender_id": owner_id,
+                    "receiver_id": "",
                 }
             })
             .to_string()
@@ -473,7 +474,7 @@ impl Contract {
             .nft_transfer(receiver_id, token_id.clone(), approval_id, memo);
         env::log(
             json!({
-                "type": "transfer",
+                "type": "nft_transfer",
                 "params": {
                     "token_id": token_id,
                     "sender_id": sender_id,
@@ -501,7 +502,7 @@ impl Contract {
                 .nft_transfer_call(receiver_id, token_id.clone(), approval_id, memo, msg);
         env::log(
             json!({
-                "type": "transfer",
+                "type": "nft_transfer",
                 "params": {
                     "token_id": token_id,
                     "sender_id": sender_id,

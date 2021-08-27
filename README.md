@@ -46,7 +46,7 @@ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --acc
 
 ### Nft set series mintable (Author only )
 ```
-env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_set_series_non_mintable '{"token_series_id":"1", "is_mintable":false}' --depositYocto 1
+env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_set_series_non_mintable '{"token_series_id":"1"}' --depositYocto 1
 ```
 
 ### Nft set series price (Author only)
