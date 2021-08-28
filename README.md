@@ -36,7 +36,7 @@ env NEAR_ENV=lddocal near call --keyPath ~/.near/localnet/validator_key.json --a
 
 ### NFT batch mint
 ```
-env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic-migration.test.near comic-migration.test.near nft_mint_batch '{"token_series_id":"1","receiver_ids":["comic.test.near", "comic1.test.near", "comic2.test.near", "comic3.test.near", "comic4.test.near", "comic5.test.near", "comic6.test.near", "comic7.test.near", "comic8.test.near", "comic9.test.near", "comic222.test.near", "comic21.test.near", "comic22.test.near", "comic23.test.near", "comic24.test.near"],"issued_ats":["1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920"]}' --gas 300000000000000
+env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic-migration.test.near comic-migration.test.near nft_mint_batch '{"token_series_id":"1","receiver_ids":["comic.test.near", "comic1.test.near", "comic2.test.near", "comic3.test.near", "comic4.test.near", "comic5.test.near", "comic6.test.near", "comic7.test.near", "comic8.test.near", "comic9.test.near", "comic222.test.near", "comic21.test.near", "comic22.test.near"],"issued_ats":["1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920"], "edition_ids":["1","2","3","4","5","6","7","8","9","10","11","12","13"]}' --gas 300000000000000
 ```
 
 ### NFT transfer with payout
