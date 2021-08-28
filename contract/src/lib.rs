@@ -111,6 +111,7 @@ impl Contract {
     #[payable]
     pub fn nft_create_series(
         &mut self,
+        token_series_id: U64,
         token_metadata: TokenMetadata,
         creator_id: ValidAccountId,
         price: Option<U128>,
@@ -123,8 +124,7 @@ impl Contract {
             "Paras: Only owner can set series"
         );
 
-        let token_series_id: String = format!(
-            "{}", (self.token_series_by_id.len() + 1));
+        let token_series_id: String = format!("{}", token_series_id.0);
 
         assert!(
             self.token_series_by_id.get(&token_series_id).is_none(),
