@@ -466,17 +466,25 @@ impl Contract {
         // CUSTOM (switch metadata for the token_series metadata)
         let mut token_id_iter = token_id.split(TOKEN_DELIMETER);
         let token_series_id = token_id_iter.next().unwrap().parse().unwrap();
-        let mut metadata = self.token_series_by_id.get(&token_series_id).unwrap().metadata;
-        metadata.title = Some(format!(
+                let series_metadata = self.token_series_by_id.get(&token_series_id).unwrap().metadata;
+
+        let mut token_metadata = self.tokens.token_metadata_by_id.as_ref().unwrap().get(&token_id).unwrap();
+
+        token_metadata.title = Some(format!(
             "{}{}{}",
-            metadata.title.unwrap(),
+            series_metadata.title.unwrap(),
             TITLE_DELIMETER,
             token_id_iter.next().unwrap()
         ));
+
+        token_metadata.reference = series_metadata.reference;
+        token_metadata.media = series_metadata.media;
+        token_metadata.copies = series_metadata.copies;
+
         Some(Token {
             token_id,
             owner_id,
-            metadata: Some(metadata),
+            metadata: Some(token_metadata),
             approved_account_ids,
         })
     }
