@@ -78,8 +78,8 @@ impl Contract {
             owner_id,
             NFTContractMetadata {
                 spec: NFT_METADATA_SPEC.to_string(),
-                name: "Comic by Paras".to_string(),
-                symbol: "COMIC".to_string(),
+                name: "Paras".to_string(),
+                symbol: "PARAS".to_string(),
                 icon: Some(DATA_IMAGE_SVG_COMIC_ICON.to_string()),
                 base_uri: Some("https://ipfs.fleek.co/ipfs".to_string()),
                 reference: None,
@@ -198,7 +198,7 @@ impl Contract {
             "Paras: attached deposit is less than price : {}",
             price
         );
-        let token: Token = self._nft_mint_series(token_series_id, receiver_id);
+        let token: Token = self._nft_mint_series(token_series_id, receiver_id.into(), env::block_timestamp().to_string());
         Promise::new(token_series.creator_id).transfer(price);
 
         refund_deposit(env::storage_usage() - initial_storage_usage, price);
@@ -211,13 +211,37 @@ impl Contract {
 
         let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
         assert_eq!(env::predecessor_account_id(), token_series.creator_id, "Paras: not creator");
-        let token: Token = self._nft_mint_series(token_series_id, receiver_id);
+        let token: Token = self._nft_mint_series(token_series_id, receiver_id.into(), env::block_timestamp().to_string());
 
         refund_deposit(env::storage_usage() - initial_storage_usage, 0);
         token
     }
 
-    fn _nft_mint_series(&mut self, token_series_id: TokenSeriesId, receiver_id: ValidAccountId) -> Token {
+    pub fn nft_mint_batch(
+        &mut self,
+        token_series_id: TokenSeriesId,
+        receiver_ids: Vec<AccountId>,
+        issued_ats: Vec<String>,
+    ) {
+        assert_eq!(
+            env::predecessor_account_id(),
+            self.tokens.owner_id,
+            "Only owner"
+        );
+
+        assert_eq!(
+            receiver_ids.len(),
+            issued_ats.len(),
+            "Length differ"
+        );
+
+        for i in 0..receiver_ids.len() {
+            self._nft_mint_series(token_series_id.clone(), receiver_ids[i].clone(), issued_ats[i].clone());
+
+        }
+    }
+
+    fn _nft_mint_series(&mut self, token_series_id: TokenSeriesId, receiver_id: AccountId, issued_at: String) -> Token {
         let mut token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
         assert!(
             token_series.is_mintable,
@@ -243,7 +267,7 @@ impl Contract {
             media: None, // URL to associated media, preferably to decentralized, content-addressed storage
             media_hash: None, // Base64-encoded sha256 hash of content referenced by the `media` field. Required if `media` is included.
             copies: None, // number of copies of this set of metadata in existence when token was minted.
-            issued_at: Some(env::block_timestamp().to_string()), // ISO 8601 datetime when token was issued or minted
+            issued_at: Some(issued_at), // ISO 8601 datetime when token was issued or minted
             expires_at: None, // ISO 8601 datetime when token expires
             starts_at: None, // ISO 8601 datetime when token starts being valid
             updated_at: None, // ISO 8601 datetime when token was last updated
@@ -283,6 +307,7 @@ impl Contract {
                     "token_id": token_id,
                     "sender_id": "",
                     "receiver_id": owner_id,
+                    "token_metadata": token_res.metadata,
                 }
             })
             .to_string()
