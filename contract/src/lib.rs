@@ -31,7 +31,7 @@ pub struct TokenSeries {
 	metadata: TokenMetadata,
 	creator_id: AccountId,
 	tokens: UnorderedSet<TokenId>,
-    price: Balance,
+    price: Option<Balance>,
     is_mintable: bool,
     royalty: HashMap<AccountId, u32>
 }
@@ -112,7 +112,7 @@ impl Contract {
         &mut self,
         token_metadata: TokenMetadata,
         creator_id: ValidAccountId,
-        price: U128,
+        price: Option<U128>,
         royalty: Option<HashMap<AccountId, u32>>,
     ) {
         let initial_storage_usage = env::storage_usage();
@@ -147,6 +147,11 @@ impl Contract {
             total_perpetual <= 9000,
             "Exceeds maximum royalty : 9000",
         );
+        let price_res: Option<u128> = if price.is_some() {
+            Some(price.unwrap().0)
+        } else {
+            None
+        };
 
         self.token_series_by_id.insert(&token_series_id, &TokenSeries{
             metadata: token_metadata.clone(),
@@ -158,7 +163,7 @@ impl Contract {
                 .try_to_vec()
                 .unwrap(),
             ),
-            price: price.into(),
+            price: price_res,
             is_mintable: true,
             royalty: royalty_res.clone(),
         });
@@ -186,7 +191,7 @@ impl Contract {
         let initial_storage_usage = env::storage_usage();
 
         let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
-        let price: u128 = token_series.price;
+        let price: u128 = token_series.price.unwrap();
         let attached_deposit = env::attached_deposit();
         assert!(
             attached_deposit >= price,
@@ -324,7 +329,7 @@ impl Contract {
             "Paras: Creator only"
         );
 
-        token_series.price = price.into();
+        token_series.price = Some(price.into());
         self.token_series_by_id.insert(&token_series_id, &token_series);
         env::log(
             json!({
@@ -337,7 +342,7 @@ impl Contract {
             .to_string()
             .as_bytes(),
         );
-        return token_series.price.into();
+        return token_series.price.unwrap().into();
     }
 
     #[payable]
@@ -399,7 +404,7 @@ impl Contract {
         (TOKEN_DELIMETER, TITLE_DELIMETER, EDITION_DELIMETER)
     }
 
-    pub fn nft_get_price(self, token_series_id: TokenSeriesId) -> Balance {
+    pub fn nft_get_price(self, token_series_id: TokenSeriesId) -> Option<Balance> {
         self.token_series_by_id.get(&token_series_id).unwrap().price
     }
 
