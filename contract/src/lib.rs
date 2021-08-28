@@ -24,6 +24,7 @@ pub const TITLE_DELIMETER: &str = " #";
 pub const EDITION_DELIMETER: &str = "/";
 
 pub type TokenSeriesId = String;
+pub type Payout = HashMap<AccountId, U128>;
 
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct TokenSeries {
@@ -32,6 +33,7 @@ pub struct TokenSeries {
 	tokens: UnorderedSet<TokenId>,
     price: Balance,
     is_mintable: bool,
+    royalty: HashMap<AccountId, u32>
 }
 
 #[derive(Serialize, Deserialize)]
@@ -39,6 +41,7 @@ pub struct TokenSeries {
 pub struct TokenSeriesJson {
 	metadata: TokenMetadata,
 	creator_id: AccountId,
+    royalty: HashMap<AccountId, u32>
 }
 
 near_sdk::setup_alloc!();
@@ -110,6 +113,7 @@ impl Contract {
         token_metadata: TokenMetadata,
         creator_id: ValidAccountId,
         price: U128,
+        royalty: Option<HashMap<AccountId, u32>>,
     ) {
         let initial_storage_usage = env::storage_usage();
         let owner_id = env::predecessor_account_id();
@@ -128,6 +132,21 @@ impl Contract {
 
         let title = token_metadata.title.clone();
         assert!(title.is_some(), "token_metadata.title is required");
+        
+        let mut total_perpetual = 0;
+        let royalty_res = if let Some(royalty) = royalty {
+            for (_, v) in royalty.iter() {
+                total_perpetual += *v;
+            }
+            royalty
+        } else {
+            HashMap::new()
+        };
+
+        assert!(
+            total_perpetual <= 9000,
+            "Exceeds maximum royalty : 9000",
+        );
 
         self.token_series_by_id.insert(&token_series_id, &TokenSeries{
             metadata: token_metadata.clone(),
@@ -141,6 +160,7 @@ impl Contract {
             ),
             price: price.into(),
             is_mintable: true,
+            royalty: royalty_res.clone(),
         });
 
         env::log(
@@ -150,7 +170,8 @@ impl Contract {
                     "token_series_id": token_series_id,
                     "token_metadata": token_metadata,
                     "creator_id": creator_id,
-                    "price": price
+                    "price": price,
+                    "royalty": royalty_res
                 }
             })
             .to_string()
@@ -370,6 +391,7 @@ impl Contract {
 		TokenSeriesJson{
 			metadata: token_series.metadata,
 			creator_id: token_series.creator_id,
+            royalty: token_series.royalty,
 		}
 	}
 
@@ -401,6 +423,7 @@ impl Contract {
             .map(|(_, token_series)| TokenSeriesJson{
                 metadata: token_series.metadata,
                 creator_id: token_series.creator_id,
+                royalty: token_series.royalty,
             })
             .collect()
     }
@@ -579,6 +602,90 @@ impl Contract {
             .map(|token_id| self.nft_token(token_id).unwrap())
             .collect()
     }
+
+    pub fn nft_payout(
+        &self, 
+        token_id: TokenId,
+        balance: U128, 
+        max_len_payout: u32
+    ) -> Payout{
+        let mut token_id_iter = token_id.split(TOKEN_DELIMETER);
+        let token_series_id = token_id_iter.next().unwrap().parse().unwrap();
+        let royalty = self.token_series_by_id.get(&token_series_id).expect("no type").royalty;
+
+        assert!(royalty.len() as u32 <= max_len_payout, "Market cannot payout to that many receivers");
+
+        let balance_u128: u128 = balance.into();
+
+        let mut payout: Payout = HashMap::new();
+        for (k, v) in royalty.iter() {
+            let key = k.clone();
+            payout.insert(key, royalty_to_payout(*v, balance_u128));
+        }
+        payout
+    }
+
+    #[payable]
+    pub fn nft_transfer_payout(
+        &mut self, 
+        receiver_id: ValidAccountId,
+        token_id: TokenId,
+        approval_id: U64,
+        balance: U128, 
+        max_len_payout: u32
+    ) -> Payout {
+        assert_one_yocto();
+
+        // Transfer
+        let previous_token = self.nft_token(token_id.clone()).expect("no token");
+        self.tokens.nft_transfer(receiver_id.clone(), token_id.clone(), Some(approval_id.into()), None);
+
+        // Payout calculation
+        let owner_id = previous_token.owner_id;
+        let mut total_perpetual = 0;
+        let payout = {
+            let balance_u128: u128 = balance.into();
+            let mut payout: Payout = HashMap::new();
+
+            let mut token_id_iter = token_id.split(TOKEN_DELIMETER);
+            let token_series_id = token_id_iter.next().unwrap().parse().unwrap();
+            let royalty = self.token_series_by_id.get(&token_series_id).expect("no type").royalty;
+
+            assert!(royalty.len() as u32 <= max_len_payout, "Market cannot payout to that many receivers");
+            for (k, v) in royalty.iter() {
+                let key = k.clone();
+                if key != owner_id {
+                    payout.insert(key, royalty_to_payout(*v, balance_u128));
+                    total_perpetual += *v;
+                }
+            }
+
+            assert!(
+                total_perpetual <= 10000,
+                "Total payout overflow"
+            );
+
+            payout.insert(owner_id.clone(), royalty_to_payout(10000 - total_perpetual, balance_u128));
+            payout
+        }; 
+        env::log(
+            json!({
+                "type": "nft_transfer",
+                "params": {
+                    "token_id": token_id,
+                    "sender_id": owner_id,
+                    "receiver_id": receiver_id,
+                }
+            })
+            .to_string()
+            .as_bytes(),
+        );
+        payout
+    }
+}
+
+fn royalty_to_payout(a: u32, b: Balance) -> U128 {
+    U128(a as u128 * b / 10_000u128)
 }
 
 // near_contract_standards::impl_non_fungible_token_core!(Contract, tokens);
