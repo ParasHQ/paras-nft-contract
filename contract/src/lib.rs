@@ -238,7 +238,7 @@ impl Contract {
             media: None, // URL to associated media, preferably to decentralized, content-addressed storage
             media_hash: None, // Base64-encoded sha256 hash of content referenced by the `media` field. Required if `media` is included.
             copies: None, // number of copies of this set of metadata in existence when token was minted.
-            issued_at: None, // ISO 8601 datetime when token was issued or minted
+            issued_at: Some(env::block_timestamp().to_string()), // ISO 8601 datetime when token was issued or minted
             expires_at: None, // ISO 8601 datetime when token expires
             starts_at: None, // ISO 8601 datetime when token starts being valid
             updated_at: None, // ISO 8601 datetime when token was last updated
