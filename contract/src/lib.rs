@@ -16,29 +16,32 @@ use near_sdk::{
 use near_sdk::serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// between token_type_id and edition number e.g. 42:2 where 42 is type and 2 is edition
+/// between token_series_id and edition number e.g. 42:2 where 42 is series and 2 is edition
 pub const TOKEN_DELIMETER: char = ':';
 /// TokenMetadata.title returned for individual token e.g. "Title — 2/10" where 10 is max copies
 pub const TITLE_DELIMETER: &str = " #";
 /// e.g. "Title — 2/10" where 10 is max copies
 pub const EDITION_DELIMETER: &str = "/";
 
-pub type TokenTypeId = String;
+pub type TokenSeriesId = String;
+pub type Payout = HashMap<AccountId, U128>;
 
 #[derive(BorshDeserialize, BorshSerialize)]
-pub struct TokenType {
+pub struct TokenSeries {
 	metadata: TokenMetadata,
-	author_id: AccountId,
+	creator_id: AccountId,
 	tokens: UnorderedSet<TokenId>,
     price: Balance,
     is_mintable: bool,
+    royalty: HashMap<AccountId, u32>
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
-pub struct TokenTypeJson {
+pub struct TokenSeriesJson {
 	metadata: TokenMetadata,
-	author_id: AccountId,
+	creator_id: AccountId,
+    royalty: HashMap<AccountId, u32>
 }
 
 near_sdk::setup_alloc!();
@@ -49,7 +52,7 @@ pub struct Contract {
     tokens: NonFungibleToken,
     metadata: LazyOption<NFTContractMetadata>,
     // CUSTOM
-	token_type_by_id: UnorderedMap<TokenTypeId, TokenType>,
+	token_series_by_id: UnorderedMap<TokenSeriesId, TokenSeries>,
 }
 
 const DATA_IMAGE_SVG_COMIC_ICON: &str = "data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 79C5.02944 79 1 74.9706 1 70V10C1 5.02944 5.02944 1 10 1H71C75.4183 1 79 4.58172 79 9V70C79 74.9706 74.9706 79 70 79H10Z' fill='%2318162B' stroke='%23C6FF00' stroke-width='2'/%3E%3Cpath d='M71 0L77 3L80 9H71V0Z' fill='%23C6FF00'/%3E%3Cpath d='M9 80L3.5 76.5L0 71H9V80Z' fill='%23C6FF00'/%3E%3Cpath d='M40.7745 64C35.0045 64 30.433 62.3846 27.0598 59.1538C23.6866 55.8782 22 51.2115 22 45.1538V33.8462C22 27.7885 23.6866 23.1442 27.0598 19.9135C30.433 16.6378 35.0045 15 40.7745 15C46.5 15 50.9162 16.5929 54.0231 19.7788C57.1744 22.9199 58.75 27.25 58.75 32.7692V33.1731H50.0951V32.5C50.0951 29.7179 49.3184 27.4295 47.7649 25.6346C46.2559 23.8397 43.9257 22.9423 40.7745 22.9423C37.6676 22.9423 35.2264 23.9071 33.4511 25.8365C31.6757 27.766 30.788 30.391 30.788 33.7115V45.2885C30.788 48.5641 31.6757 51.1891 33.4511 53.1635C35.2264 55.0929 37.6676 56.0577 40.7745 56.0577C43.9257 56.0577 46.2559 55.1603 47.7649 53.3654C49.3184 51.5256 50.0951 49.2372 50.0951 46.5V45.2885H58.75V46.2308C58.75 51.75 57.1744 56.1026 54.0231 59.2885C50.9162 62.4295 46.5 64 40.7745 64Z' fill='%23C6FF00'/%3E%3C/svg%3E";
@@ -62,8 +65,8 @@ enum StorageKey {
     Enumeration,
     Approval,
     // CUSTOM
-    TokenTypeById,
-    TokensByTypeInner { token_type: String },
+    TokenSeriesById,
+    TokensBySeriesInner { token_series: String },
     TokensPerOwner { account_hash: Vec<u8> },
 }
 
@@ -97,7 +100,7 @@ impl Contract {
                 Some(StorageKey::Enumeration),
                 Some(StorageKey::Approval),
             ),
-            token_type_by_id: UnorderedMap::new(StorageKey::TokenTypeById),
+            token_series_by_id: UnorderedMap::new(StorageKey::TokenSeriesById),
             metadata: LazyOption::new(StorageKey::Metadata, Some(&metadata)),
         }
     }
@@ -105,52 +108,70 @@ impl Contract {
     // CUSTOM
 
     #[payable]
-    pub fn nft_create_type(
+    pub fn nft_create_series(
         &mut self,
         token_metadata: TokenMetadata,
-        author_id: ValidAccountId,
+        creator_id: ValidAccountId,
         price: U128,
+        royalty: Option<HashMap<AccountId, u32>>,
     ) {
         let initial_storage_usage = env::storage_usage();
         let owner_id = env::predecessor_account_id();
         assert_eq!(
             owner_id, self.tokens.owner_id,
-            "Paras: Only owner can set type"
+            "Paras: Only owner can set series"
         );
 
-        let token_type: String = format!(
-            "{}", (self.token_type_by_id.len() + 1));
+        let token_series_id: String = format!(
+            "{}", (self.token_series_by_id.len() + 1));
 
         assert!(
-            self.token_type_by_id.get(&token_type).is_none(),
-            "Paras: duplicate token_type"
+            self.token_series_by_id.get(&token_series_id).is_none(),
+            "Paras: duplicate token_series_id"
         );
 
         let title = token_metadata.title.clone();
         assert!(title.is_some(), "token_metadata.title is required");
+        
+        let mut total_perpetual = 0;
+        let royalty_res = if let Some(royalty) = royalty {
+            for (_, v) in royalty.iter() {
+                total_perpetual += *v;
+            }
+            royalty
+        } else {
+            HashMap::new()
+        };
 
-        self.token_type_by_id.insert(&token_type, &TokenType{
+        assert!(
+            total_perpetual <= 9000,
+            "Exceeds maximum royalty : 9000",
+        );
+
+        self.token_series_by_id.insert(&token_series_id, &TokenSeries{
             metadata: token_metadata.clone(),
-            author_id: author_id.to_string(),
+            creator_id: creator_id.to_string(),
             tokens: UnorderedSet::new(
-                StorageKey::TokensByTypeInner {
-                    token_type: token_type.clone(),
+                StorageKey::TokensBySeriesInner {
+                    token_series: token_series_id.clone(),
                 }
                 .try_to_vec()
                 .unwrap(),
             ),
             price: price.into(),
             is_mintable: true,
+            royalty: royalty_res.clone(),
         });
 
         env::log(
             json!({
-                "type": "create_type",
+                "type": "nft_create_series",
                 "params": {
-                    "token_type": token_type,
+                    "token_series_id": token_series_id,
                     "token_metadata": token_metadata,
-                    "author_id": author_id,
-                    "price": price
+                    "creator_id": creator_id,
+                    "price": price,
+                    "royalty": royalty_res
                 }
             })
             .to_string()
@@ -161,50 +182,54 @@ impl Contract {
     }
 
     #[payable]
-    pub fn nft_buy(&mut self, token_type: TokenTypeId, receiver_id: ValidAccountId) -> Token {
+    pub fn nft_buy(&mut self, token_series_id: TokenSeriesId, receiver_id: ValidAccountId) -> Token {
         let initial_storage_usage = env::storage_usage();
 
-        let token_type_res = self.token_type_by_id.get(&token_type).expect("Token type not exist");
-        let price: u128 = token_type_res.price;
+        let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
+        let price: u128 = token_series.price;
         let attached_deposit = env::attached_deposit();
         assert!(
             attached_deposit >= price,
             "Paras: attached deposit is less than price : {}",
             price
         );
-        let token: Token = self._nft_mint_type(token_type, receiver_id);
-        Promise::new(token_type_res.author_id).transfer(price);
+        let token: Token = self._nft_mint_series(token_series_id, receiver_id);
+        Promise::new(token_series.creator_id).transfer(price);
 
         refund_deposit(env::storage_usage() - initial_storage_usage, price);
         token
     }
 
     #[payable]
-    pub fn nft_mint_type(&mut self, token_type: TokenTypeId, receiver_id: ValidAccountId) -> Token {
+    pub fn nft_mint(&mut self, token_series_id: TokenSeriesId, receiver_id: ValidAccountId) -> Token {
         let initial_storage_usage = env::storage_usage();
 
-        let token_type_res = self.token_type_by_id.get(&token_type).expect("Token type not exist");
-        assert_eq!(env::predecessor_account_id(), token_type_res.author_id, "not type owner");
-        let token: Token = self._nft_mint_type(token_type, receiver_id);
+        let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
+        assert_eq!(env::predecessor_account_id(), token_series.creator_id, "Paras: not creator");
+        let token: Token = self._nft_mint_series(token_series_id, receiver_id);
 
         refund_deposit(env::storage_usage() - initial_storage_usage, 0);
         token
     }
 
-    fn _nft_mint_type(&mut self, token_type: TokenTypeId, receiver_id: ValidAccountId) -> Token {
-        let mut token_type_res = self.token_type_by_id.get(&token_type).expect("Token type not exist");
+    fn _nft_mint_series(&mut self, token_series_id: TokenSeriesId, receiver_id: ValidAccountId) -> Token {
+        let mut token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
         assert!(
-            token_type_res.is_mintable,
-            "Paras: Token type is not mintable"
+            token_series.is_mintable,
+            "Paras: Token series is not mintable"
         );
 
-        let num_tokens = token_type_res.tokens.len();
-        let max_copies = token_type_res.metadata.copies.unwrap_or(u64::MAX);
-        assert_ne!(num_tokens, max_copies, "Type supply maxed");
+        let num_tokens = token_series.tokens.len();
+        let max_copies = token_series.metadata.copies.unwrap_or(u64::MAX);
+        assert_ne!(num_tokens, max_copies, "Series supply maxed");
 
-        let token_id = format!("{}{}{}", &token_type, TOKEN_DELIMETER, token_type_res.tokens.len() + 1);
-        token_type_res.tokens.insert(&token_id);
-        self.token_type_by_id.insert(&token_type, &token_type_res);
+        if (num_tokens + 1) == max_copies {
+            token_series.is_mintable = false;
+        }
+
+        let token_id = format!("{}{}{}", &token_series_id, TOKEN_DELIMETER, num_tokens + 1);
+        token_series.tokens.insert(&token_id);
+        self.token_series_by_id.insert(&token_series_id, &token_series);
 
         // you can add custom metadata to each token here
         let metadata = Some(TokenMetadata {
@@ -213,7 +238,7 @@ impl Contract {
             media: None, // URL to associated media, preferably to decentralized, content-addressed storage
             media_hash: None, // Base64-encoded sha256 hash of content referenced by the `media` field. Required if `media` is included.
             copies: None, // number of copies of this set of metadata in existence when token was minted.
-            issued_at: None, // ISO 8601 datetime when token was issued or minted
+            issued_at: Some(env::block_timestamp().to_string()), // ISO 8601 datetime when token was issued or minted
             expires_at: None, // ISO 8601 datetime when token expires
             starts_at: None, // ISO 8601 datetime when token starts being valid
             updated_at: None, // ISO 8601 datetime when token was last updated
@@ -248,11 +273,11 @@ impl Contract {
 
         env::log(
             json!({
-                "type": "mint",
+                "type": "nft_transfer",
                 "params": {
                     "token_id": token_id,
-                    "metadata": token_res.metadata,
-                    "owner_id": token_res.owner_id
+                    "sender_id": "",
+                    "receiver_id": owner_id,
                 }
             })
             .to_string()
@@ -268,44 +293,51 @@ impl Contract {
     }
 
     #[payable]
-    pub fn nft_set_type_mintable(&mut self, token_type: TokenTypeId, is_mintable: bool) {
+    pub fn nft_set_series_non_mintable(&mut self, token_series_id: TokenSeriesId) {
         assert_one_yocto();
 
-        let mut token_type_res = self.token_type_by_id.get(&token_type).expect("Token type not exist");
+        let mut token_series = self.token_series_by_id.get(&token_series_id).expect("Token series not exist");
         assert_eq!(
             env::predecessor_account_id(),
-            token_type_res.author_id,
-            "Paras: Author only"
+            token_series.creator_id,
+            "Paras: Creator only"
         );
-        token_type_res.is_mintable = is_mintable;
-        self.token_type_by_id.insert(&token_type, &token_type_res);
+
+        assert_eq!(
+            token_series.is_mintable,
+            true,
+            "Paras: already non-mintable"
+        );
+
+        token_series.is_mintable = false;
+        self.token_series_by_id.insert(&token_series_id, &token_series);
     }
 
     #[payable]
-    pub fn nft_set_type_price(&mut self, token_type: TokenTypeId, price: U128) -> U128 {
+    pub fn nft_set_series_price(&mut self, token_series_id: TokenSeriesId, price: U128) -> U128 {
         assert_one_yocto();
 
-        let mut token_type_res = self.token_type_by_id.get(&token_type).expect("Token type not exist");
+        let mut token_series = self.token_series_by_id.get(&token_series_id).expect("Token series not exist");
         assert_eq!(
             env::predecessor_account_id(),
-            token_type_res.author_id,
-            "Paras: Author only"
+            token_series.creator_id,
+            "Paras: Creator only"
         );
 
-        token_type_res.price = price.into();
-        self.token_type_by_id.insert(&token_type, &token_type_res);
+        token_series.price = price.into();
+        self.token_series_by_id.insert(&token_series_id, &token_series);
         env::log(
             json!({
-                "type": "set_type_price",
+                "type": "nft_set_series_price",
                 "params": {
-                    "token_type": token_type,
+                    "token_series_id": token_series_id,
                     "price": price
                 }
             })
             .to_string()
             .as_bytes(),
         );
-        return token_type_res.price.into();
+        return token_series.price.into();
     }
 
     #[payable]
@@ -340,10 +372,11 @@ impl Contract {
         self.tokens.owner_by_id.remove(&token_id);
         env::log(
             json!({
-                "type": "burn",
+                "type": "nft_transfer",
                 "params": {
                     "token_id": token_id,
-                    "owner_id": owner_id,
+                    "sender_id": owner_id,
+                    "receiver_id": "",
                 }
             })
             .to_string()
@@ -353,58 +386,60 @@ impl Contract {
 
     // CUSTOM VIEWS
 
-	pub fn nft_get_type(&self, token_type: TokenTypeId) -> TokenTypeJson {
-		let token_type = self.token_type_by_id.get(&token_type).expect("no type");
-		TokenTypeJson{
-			metadata: token_type.metadata,
-			author_id: token_type.author_id,
+	pub fn nft_get_series_single(&self, token_series_id: TokenSeriesId) -> TokenSeriesJson {
+		let token_series = self.token_series_by_id.get(&token_series_id).expect("Series does not exist");
+		TokenSeriesJson{
+			metadata: token_series.metadata,
+			creator_id: token_series.creator_id,
+            royalty: token_series.royalty,
 		}
 	}
 
-    pub fn nft_get_type_format(self) -> (char, &'static str, &'static str) {
+    pub fn nft_get_series_format(self) -> (char, &'static str, &'static str) {
         (TOKEN_DELIMETER, TITLE_DELIMETER, EDITION_DELIMETER)
     }
 
-    pub fn nft_get_price(self, token_type: TokenTypeId) -> Balance {
-        self.token_type_by_id.get(&token_type).unwrap().price
+    pub fn nft_get_price(self, token_series_id: TokenSeriesId) -> Balance {
+        self.token_series_by_id.get(&token_series_id).unwrap().price
     }
 
-    pub fn nft_get_types(
+    pub fn nft_get_series(
         &self,
         from_index: Option<U128>,
         limit: Option<u64>,
-    ) -> Vec<TokenTypeJson> {
+    ) -> Vec<TokenSeriesJson> {
         let start_index: u128 = from_index.map(From::from).unwrap_or_default();
         assert!(
-            (self.token_type_by_id.len() as u128) > start_index,
+            (self.token_series_by_id.len() as u128) > start_index,
             "Out of bounds, please use a smaller from_index."
         );
         let limit = limit.map(|v| v as usize).unwrap_or(usize::MAX);
         assert_ne!(limit, 0, "Cannot provide limit of 0.");
 
-        self.token_type_by_id
+        self.token_series_by_id
             .iter()
             .skip(start_index as usize)
             .take(limit)
-            .map(|(_, token_type)| TokenTypeJson{
-                metadata: token_type.metadata,
-                author_id: token_type.author_id,
+            .map(|(_, token_series)| TokenSeriesJson{
+                metadata: token_series.metadata,
+                creator_id: token_series.creator_id,
+                royalty: token_series.royalty,
             })
             .collect()
     }
 
-    pub fn nft_supply_for_type(&self, token_type: TokenTypeId) -> U64 {
-        self.token_type_by_id.get(&token_type).expect("Token type not exist").tokens.len().into()
+    pub fn nft_supply_for_series(&self, token_series_id: TokenSeriesId) -> U64 {
+        self.token_series_by_id.get(&token_series_id).expect("Token series not exist").tokens.len().into()
     }
 
-    pub fn nft_tokens_by_type(
+    pub fn nft_tokens_by_series(
         &self,
-        token_type: TokenTypeId,
+        token_series_id: TokenSeriesId,
         from_index: Option<U128>,
         limit: Option<u64>,
     ) -> Vec<Token> {
         let start_index: u128 = from_index.map(From::from).unwrap_or_default();
-        let tokens = self.token_type_by_id.get(&token_type).unwrap().tokens;
+        let tokens = self.token_series_by_id.get(&token_series_id).unwrap().tokens;
         assert!(
             (tokens.len() as u128) > start_index,
             "Out of bounds, please use a smaller from_index."
@@ -428,10 +463,10 @@ impl Contract {
             .as_ref()
             .and_then(|by_id| by_id.get(&token_id).or_else(|| Some(HashMap::new())));
 
-        // CUSTOM (switch metadata for the token_type metadata)
+        // CUSTOM (switch metadata for the token_series metadata)
         let mut token_id_iter = token_id.split(TOKEN_DELIMETER);
-        let token_type = token_id_iter.next().unwrap().parse().unwrap();
-        let mut metadata = self.token_type_by_id.get(&token_type).unwrap().metadata;
+        let token_series_id = token_id_iter.next().unwrap().parse().unwrap();
+        let mut metadata = self.token_series_by_id.get(&token_series_id).unwrap().metadata;
         metadata.title = Some(format!(
             "{}{}{}",
             metadata.title.unwrap(),
@@ -462,7 +497,7 @@ impl Contract {
             .nft_transfer(receiver_id, token_id.clone(), approval_id, memo);
         env::log(
             json!({
-                "type": "transfer",
+                "type": "nft_transfer",
                 "params": {
                     "token_id": token_id,
                     "sender_id": sender_id,
@@ -490,7 +525,7 @@ impl Contract {
                 .nft_transfer_call(receiver_id, token_id.clone(), approval_id, memo, msg);
         env::log(
             json!({
-                "type": "transfer",
+                "type": "nft_transfer",
                 "params": {
                     "token_id": token_id,
                     "sender_id": sender_id,
@@ -567,6 +602,90 @@ impl Contract {
             .map(|token_id| self.nft_token(token_id).unwrap())
             .collect()
     }
+
+    pub fn nft_payout(
+        &self, 
+        token_id: TokenId,
+        balance: U128, 
+        max_len_payout: u32
+    ) -> Payout{
+        let mut token_id_iter = token_id.split(TOKEN_DELIMETER);
+        let token_series_id = token_id_iter.next().unwrap().parse().unwrap();
+        let royalty = self.token_series_by_id.get(&token_series_id).expect("no type").royalty;
+
+        assert!(royalty.len() as u32 <= max_len_payout, "Market cannot payout to that many receivers");
+
+        let balance_u128: u128 = balance.into();
+
+        let mut payout: Payout = HashMap::new();
+        for (k, v) in royalty.iter() {
+            let key = k.clone();
+            payout.insert(key, royalty_to_payout(*v, balance_u128));
+        }
+        payout
+    }
+
+    #[payable]
+    pub fn nft_transfer_payout(
+        &mut self, 
+        receiver_id: ValidAccountId,
+        token_id: TokenId,
+        approval_id: U64,
+        balance: U128, 
+        max_len_payout: u32
+    ) -> Payout {
+        assert_one_yocto();
+
+        // Transfer
+        let previous_token = self.nft_token(token_id.clone()).expect("no token");
+        self.tokens.nft_transfer(receiver_id.clone(), token_id.clone(), Some(approval_id.into()), None);
+
+        // Payout calculation
+        let owner_id = previous_token.owner_id;
+        let mut total_perpetual = 0;
+        let payout = {
+            let balance_u128: u128 = balance.into();
+            let mut payout: Payout = HashMap::new();
+
+            let mut token_id_iter = token_id.split(TOKEN_DELIMETER);
+            let token_series_id = token_id_iter.next().unwrap().parse().unwrap();
+            let royalty = self.token_series_by_id.get(&token_series_id).expect("no type").royalty;
+
+            assert!(royalty.len() as u32 <= max_len_payout, "Market cannot payout to that many receivers");
+            for (k, v) in royalty.iter() {
+                let key = k.clone();
+                if key != owner_id {
+                    payout.insert(key, royalty_to_payout(*v, balance_u128));
+                    total_perpetual += *v;
+                }
+            }
+
+            assert!(
+                total_perpetual <= 10000,
+                "Total payout overflow"
+            );
+
+            payout.insert(owner_id.clone(), royalty_to_payout(10000 - total_perpetual, balance_u128));
+            payout
+        }; 
+        env::log(
+            json!({
+                "type": "nft_transfer",
+                "params": {
+                    "token_id": token_id,
+                    "sender_id": owner_id,
+                    "receiver_id": receiver_id,
+                }
+            })
+            .to_string()
+            .as_bytes(),
+        );
+        payout
+    }
+}
+
+fn royalty_to_payout(a: u32, b: Balance) -> U128 {
+    U128(a as u128 * b / 10_000u128)
 }
 
 // near_contract_standards::impl_non_fungible_token_core!(Contract, tokens);
