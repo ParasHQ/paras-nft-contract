@@ -31,7 +31,7 @@ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --acc
 
 ### NFT create series with royalty
 ```
-env NEAR_ENV=lddocal near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_create_series '{"creator_id":"alice.test.near","token_metadata":{"title":"Naruto Shippuden ch.2: Menolong sasuke","media":"bafybeidzcan4nzcz7sczs4yzyxly4galgygnbjewipj6haco4kffoqpkiy", "reference":"bafybeicg4ss7qh5odijfn2eogizuxkrdh3zlv4eftcmgnljwu7dm64uwji"},"price":"1000000000000000000000000", "royalty":["alice.test.near",1000]}' --depositYocto 11790000000000000000000
+env NEAR_ENV=lddocal near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_create_series '{"creator_id":"alice.test.near","token_metadata":{"title":"Naruto Shippuden ch.2: Menolong sasuke","media":"bafybeidzcan4nzcz7sczs4yzyxly4galgygnbjewipj6haco4kffoqpkiy", "reference":"bafybeicg4ss7qh5odijfn2eogizuxkrdh3zlv4eftcmgnljwu7dm64uwji"},"price":"1000000000000000000000000", "royalty":{"alice.test.near": 1000}}' --depositYocto 11790000000000000000000
 ```
 
 ### NFT batch mint
