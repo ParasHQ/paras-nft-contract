@@ -195,7 +195,7 @@ impl Contract {
     }
 
     #[payable]
-    pub fn nft_buy(&mut self, token_series_id: TokenSeriesId, receiver_id: ValidAccountId) -> Token {
+    pub fn nft_buy(&mut self, token_series_id: TokenSeriesId, receiver_id: ValidAccountId) -> TokenId {
         let initial_storage_usage = env::storage_usage();
 
         let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
@@ -206,23 +206,23 @@ impl Contract {
             "Paras: attached deposit is less than price : {}",
             price
         );
-        let token: Token = self._nft_mint_series(&token_series_id, &receiver_id.into(), &env::block_timestamp().to_string(), &String::from("1"));
+        let token_id: TokenId = self._nft_mint_series(&token_series_id, &receiver_id.into(), &env::block_timestamp().to_string(), &String::from("1"));
         Promise::new(token_series.creator_id).transfer(price);
 
         refund_deposit(env::storage_usage() - initial_storage_usage, price);
-        token
+        token_id
     }
 
     #[payable]
-    pub fn nft_mint(&mut self, token_series_id: TokenSeriesId, receiver_id: ValidAccountId, edition_id: U64) -> Token {
+    pub fn nft_mint(&mut self, token_series_id: TokenSeriesId, receiver_id: ValidAccountId, edition_id: U64) -> TokenId {
         let initial_storage_usage = env::storage_usage();
 
         let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
         assert_eq!(env::predecessor_account_id(), token_series.creator_id, "Paras: not creator");
-        let token: Token = self._nft_mint_series(&token_series_id, &receiver_id.into(), &env::block_timestamp().to_string(), &format!("{}", edition_id.0));
+        let token_id: TokenId = self._nft_mint_series(&token_series_id, &receiver_id.into(), &env::block_timestamp().to_string(), &format!("{}", edition_id.0));
 
         refund_deposit(env::storage_usage() - initial_storage_usage, 0);
-        token
+        token_id
     }
 
     pub fn nft_mint_batch(
@@ -261,7 +261,7 @@ impl Contract {
         receiver_id: &AccountId, 
         issued_at: &String,
         edition_id: &String,
-    ) -> Token {
+    ) -> TokenId {
         let mut token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
         assert!(
             token_series.is_mintable,
@@ -323,7 +323,6 @@ impl Contract {
             tokens_per_owner.insert(&owner_id, &token_ids);
         }
 
-        let token_res = self.nft_token(token_id.clone()).unwrap();
 
         env::log(
             json!({
@@ -332,19 +331,13 @@ impl Contract {
                     "token_id": token_id,
                     "sender_id": "",
                     "receiver_id": owner_id,
-                    "token_metadata": token_res.metadata,
                 }
             })
             .to_string()
             .as_bytes(),
         );
 
-        Token {
-            token_id,
-            owner_id: token_res.owner_id,
-            metadata: token_res.metadata,
-            approved_account_ids: token_res.approved_account_ids
-        }
+        token_id
     }
 
     #[payable]
