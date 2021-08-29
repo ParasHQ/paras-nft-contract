@@ -277,11 +277,6 @@ impl Contract {
         }
 
         let token_id = format!("{}{}{}", &token_series_id, TOKEN_DELIMETER, &edition_id);
-        assert_eq!(
-            token_series.tokens.contains(&token_id),
-            false,
-            "Token_id {} already minted", token_id
-        );
         token_series.tokens.insert(&token_id);
         self.token_series_by_id.insert(&token_series_id, &token_series);
 
