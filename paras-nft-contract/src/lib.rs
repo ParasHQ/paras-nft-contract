@@ -329,6 +329,16 @@ impl Contract {
 
         token_series.is_mintable = false;
         self.token_series_by_id.insert(&token_series_id, &token_series);
+        env::log(
+            json!({
+                "type": "nft_set_series_non_mintable",
+                "params": {
+                    "token_series_id": token_series_id,
+                }
+            })
+            .to_string()
+            .as_bytes(),
+        );
     }
 
     #[payable]
