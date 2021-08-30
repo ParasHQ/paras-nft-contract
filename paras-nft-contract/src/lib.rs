@@ -111,7 +111,7 @@ impl Contract {
     #[payable]
     pub fn nft_create_series(
         &mut self,
-        token_series_id: U64,
+        token_series_id: U128,
         token_metadata: TokenMetadata,
         creator_id: ValidAccountId,
         price: Option<U128>,
@@ -195,7 +195,11 @@ impl Contract {
     }
 
     #[payable]
-    pub fn nft_buy(&mut self, token_series_id: TokenSeriesId, receiver_id: ValidAccountId) -> Token {
+    pub fn nft_buy(
+        &mut self, 
+        token_series_id: TokenSeriesId, 
+        receiver_id: ValidAccountId
+    ) -> TokenId {
         let initial_storage_usage = env::storage_usage();
 
         let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
@@ -206,26 +210,34 @@ impl Contract {
             "Paras: attached deposit is less than price : {}",
             price
         );
-        let token: Token = self._nft_mint_series(token_series_id, receiver_id);
+        let token_id: TokenId = self._nft_mint_series(token_series_id, receiver_id);
         Promise::new(token_series.creator_id).transfer(price);
 
         refund_deposit(env::storage_usage() - initial_storage_usage, price);
-        token
+        token_id
     }
 
     #[payable]
-    pub fn nft_mint(&mut self, token_series_id: TokenSeriesId, receiver_id: ValidAccountId) -> Token {
+    pub fn nft_mint(
+        &mut self, 
+        token_series_id: TokenSeriesId, 
+        receiver_id: ValidAccountId
+    ) -> TokenId {
         let initial_storage_usage = env::storage_usage();
 
         let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
         assert_eq!(env::predecessor_account_id(), token_series.creator_id, "Paras: not creator");
-        let token: Token = self._nft_mint_series(token_series_id, receiver_id);
+        let token_id: TokenId = self._nft_mint_series(token_series_id, receiver_id);
 
         refund_deposit(env::storage_usage() - initial_storage_usage, 0);
-        token
+        token_id
     }
 
-    fn _nft_mint_series(&mut self, token_series_id: TokenSeriesId, receiver_id: ValidAccountId) -> Token {
+    fn _nft_mint_series(
+        &mut self, 
+        token_series_id: TokenSeriesId, 
+        receiver_id: ValidAccountId
+    ) -> TokenId {
         let mut token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
         assert!(
             token_series.is_mintable,
@@ -282,8 +294,6 @@ impl Contract {
             tokens_per_owner.insert(&owner_id, &token_ids);
         }
 
-        let token_res = self.nft_token(token_id.clone()).unwrap();
-
         env::log(
             json!({
                 "type": "nft_transfer",
@@ -297,12 +307,7 @@ impl Contract {
             .as_bytes(),
         );
 
-        Token {
-            token_id,
-            owner_id: token_res.owner_id,
-            metadata: token_res.metadata,
-            approved_account_ids: token_res.approved_account_ids
-        }
+        token_id
     }
 
     #[payable]
@@ -813,7 +818,7 @@ mod tests {
 
     fn create_series(
         contract: &mut Contract, 
-        token_series_id: U64, 
+        token_series_id: U128, 
         royalty: &HashMap<AccountId, u32>,
         price: Option<U128>,
     ) {
@@ -854,7 +859,7 @@ mod tests {
 
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
-        create_series(&mut contract, U64::from(1), &royalty, Some(U128::from(1 * 10u128.pow(24))));
+        create_series(&mut contract, U128::from(1), &royalty, Some(U128::from(1 * 10u128.pow(24))));
 
         let nft_series_return = contract.nft_get_series_single("1".to_string());
         assert_eq!(
@@ -901,8 +906,8 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U64::from(1), &royalty, Some(U128::from(1 * 10u128.pow(24))));
-        create_series(&mut contract, U64::from(1), &royalty, Some(U128::from(1 * 10u128.pow(24))));
+        create_series(&mut contract, U128::from(1), &royalty, Some(U128::from(1 * 10u128.pow(24))));
+        create_series(&mut contract, U128::from(1), &royalty, Some(U128::from(1 * 10u128.pow(24))));
     }
 
     #[test]
@@ -917,7 +922,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U64::from(1), &royalty, Some(U128::from(1 * 10u128.pow(24))));
+        create_series(&mut contract, U128::from(1), &royalty, Some(U128::from(1 * 10u128.pow(24))));
 
         testing_env!(context
             .predecessor_account_id(accounts(2))
@@ -925,9 +930,9 @@ mod tests {
             .build()
         );
 
-        let token = contract.nft_buy("1".to_string(), accounts(2));
+        let token_id = contract.nft_buy("1".to_string(), accounts(2));
 
-        let token_from_nft_token = contract.nft_token(token.token_id);
+        let token_from_nft_token = contract.nft_token(token_id);
         assert_eq!(
             token_from_nft_token.unwrap().owner_id,
             accounts(2).to_string()
@@ -946,7 +951,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U64::from(1), &royalty, None);
+        create_series(&mut contract, U128::from(1), &royalty, None);
 
         testing_env!(context
             .predecessor_account_id(accounts(1))
@@ -954,9 +959,9 @@ mod tests {
             .build()
         );
 
-        let token = contract.nft_mint("1".to_string(), accounts(2));
+        let token_id = contract.nft_mint("1".to_string(), accounts(2));
 
-        let token_from_nft_token = contract.nft_token(token.token_id);
+        let token_from_nft_token = contract.nft_token(token_id);
         assert_eq!(
             token_from_nft_token.unwrap().owner_id,
             accounts(2).to_string()
@@ -976,7 +981,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U64::from(1), &royalty, None);
+        create_series(&mut contract, U128::from(1), &royalty, None);
 
         testing_env!(context
             .predecessor_account_id(accounts(1))
@@ -1007,7 +1012,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U64::from(1), &royalty, None);
+        create_series(&mut contract, U128::from(1), &royalty, None);
 
         testing_env!(context
             .predecessor_account_id(accounts(2))
@@ -1015,9 +1020,9 @@ mod tests {
             .build()
         );
 
-        let token = contract.nft_buy("1".to_string(), accounts(2));
+        let token_id = contract.nft_buy("1".to_string(), accounts(2));
 
-        let token_from_nft_token = contract.nft_token(token.token_id);
+        let token_from_nft_token = contract.nft_token(token_id);
         assert_eq!(
             token_from_nft_token.unwrap().owner_id,
             accounts(2).to_string()
@@ -1036,7 +1041,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U64::from(1), &royalty, None);
+        create_series(&mut contract, U128::from(1), &royalty, None);
 
         testing_env!(context
             .predecessor_account_id(accounts(1))
@@ -1044,7 +1049,7 @@ mod tests {
             .build()
         );
 
-        let token = contract.nft_mint("1".to_string(), accounts(2));
+        let token_id = contract.nft_mint("1".to_string(), accounts(2));
 
         testing_env!(context
             .predecessor_account_id(accounts(2))
@@ -1052,8 +1057,8 @@ mod tests {
             .build()
         );
 
-        contract.nft_burn(token.token_id.clone());
-        let token = contract.nft_token(token.token_id);
+        contract.nft_burn(token_id.clone());
+        let token = contract.nft_token(token_id);
         assert!(token.is_none());
     }
 
@@ -1069,7 +1074,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U64::from(1), &royalty, None);
+        create_series(&mut contract, U128::from(1), &royalty, None);
 
         testing_env!(context
             .predecessor_account_id(accounts(1))
@@ -1077,7 +1082,7 @@ mod tests {
             .build()
         );
 
-        let token = contract.nft_mint("1".to_string(), accounts(2));
+        let token_id = contract.nft_mint("1".to_string(), accounts(2));
 
         testing_env!(context
             .predecessor_account_id(accounts(2))
@@ -1085,9 +1090,9 @@ mod tests {
             .build()
         );
 
-        contract.nft_transfer(accounts(3), token.token_id.clone(), None, None);
+        contract.nft_transfer(accounts(3), token_id.clone(), None, None);
 
-        let token = contract.nft_token(token.token_id).unwrap();
+        let token = contract.nft_token(token_id).unwrap();
         assert_eq!(
             token.owner_id,
             accounts(3).to_string()
@@ -1106,7 +1111,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U64::from(1), &royalty, None);
+        create_series(&mut contract, U128::from(1), &royalty, None);
 
         testing_env!(context
             .predecessor_account_id(accounts(1))
@@ -1114,7 +1119,7 @@ mod tests {
             .build()
         );
 
-        let token = contract.nft_mint("1".to_string(), accounts(2));
+        let token_id = contract.nft_mint("1".to_string(), accounts(2));
 
         testing_env!(context
             .predecessor_account_id(accounts(2))
@@ -1124,7 +1129,7 @@ mod tests {
 
         let payout = contract.nft_transfer_payout(
             accounts(3), 
-            token.token_id.clone(), 
+            token_id.clone(), 
             U64::from(0), 
             U128::from(1 * 10u128.pow(24)),
             10
@@ -1142,7 +1147,7 @@ mod tests {
 
         assert_eq!(payout, payout_calc);
 
-        let token = contract.nft_token(token.token_id).unwrap();
+        let token = contract.nft_token(token_id).unwrap();
         assert_eq!(
             token.owner_id,
             accounts(3).to_string()
