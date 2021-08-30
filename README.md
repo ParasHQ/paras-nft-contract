@@ -26,12 +26,12 @@ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --acc
 
 ### NFT create series
 ```
-env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_create_series '{"token_series_id":"1", "creator_id":"alice.test.near","token_metadata":{"title":"Naruto Shippuden ch.2: Menolong sasuke","media":"bafybeidzcan4nzcz7sczs4yzyxly4galgygnbjewipj6haco4kffoqpkiy", "reference":"bafybeicg4ss7qh5odijfn2eogizuxkrdh3zlv4eftcmgnljwu7dm64uwji"},"price":"1000000000000000000000000"}' --depositYocto 11790000000000000000000
+env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_create_series '{"token_series_id":"1", "creator_id":"alice.test.near","token_metadata":{"title":"Naruto Shippuden ch.2: Menolong sasuke","media":"bafybeidzcan4nzcz7sczs4yzyxly4galgygnbjewipj6haco4kffoqpkiy", "reference":"bafybeicg4ss7qh5odijfn2eogizuxkrdh3zlv4eftcmgnljwu7dm64uwji", "copies": 100},"price":"1000000000000000000000000"}' --depositYocto 8540000000000000000000
 ```
 
 ### NFT create series with royalty
 ```
-env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_create_series '{"token_series_id":"1","creator_id":"alice.test.near","token_metadata":{"title":"Naruto Shippuden ch.2: Menolong sasuke","media":"bafybeidzcan4nzcz7sczs4yzyxly4galgygnbjewipj6haco4kffoqpkiy", "reference":"bafybeicg4ss7qh5odijfn2eogizuxkrdh3zlv4eftcmgnljwu7dm64uwji"},"price":"1000000000000000000000000", "royalty":["alice.test.near",1000]}' --depositYocto 11790000000000000000000
+env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_create_series '{"token_series_id":"1","creator_id":"alice.test.near","token_metadata":{"title":"Naruto Shippuden ch.2: Menolong sasuke","media":"bafybeidzcan4nzcz7sczs4yzyxly4galgygnbjewipj6haco4kffoqpkiy", "reference":"bafybeicg4ss7qh5odijfn2eogizuxkrdh3zlv4eftcmgnljwu7dm64uwji", "copies": 100},"price":"1000000000000000000000000", "royalty":{"alice.test.near": 1000}}' --depositYocto 8540000000000000000000
 ```
 
 ### NFT transfer with payout
@@ -42,12 +42,12 @@ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --acc
 
 ### NFT buy
 ```
-env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_buy '{"token_series_id":"1","receiver_id":"comic.test.near"}' --depositYocto 1018320000000000000000000
+env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_buy '{"token_series_id":"1","receiver_id":"comic.test.near"}' --depositYocto 1011280000000000000000000
 ```
 
-### NFT mint series(Author only)
+### NFT mint series (Creator only)
 ```
-env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_mint '{"token_series_id":"1","receiver_id":"comic.test.near"}' --depositYocto 18320000000000000000000a
+env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId alice.test.near comic.test.near nft_mint '{"token_series_id":"1","receiver_id":"comic.test.near"}' --depositYocto 11280000000000000000000
 ```
 
 ### NFT transfer
@@ -55,19 +55,19 @@ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --acc
 env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_transfer '{"token_id":"1:1","receiver_id":"comic1.test.near"}' --depositYocto 1
 ```
 
-### NFT set series mintable (Author only )
+### NFT set series non mintable (Creator only)
 ```
-env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_set_series_non_mintable '{"token_series_id":"1"}' --depositYocto 1
+env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId alice.test.near comic.test.near nft_set_series_non_mintable '{"token_series_id":"1"}' --depositYocto 1
 ```
 
-### NFT set series price (Author only)
+### NFT set series price (Creator only)
 ```
-env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_set_series_price '{"token_series_id":"1", "price": "2000000000000000000000000"}' --depositYocto 1
+env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId alice.test.near comic.test.near nft_set_series_price '{"token_series_id":"1", "price": "2000000000000000000000000"}' --depositYocto 1
 ```
 
 ### NFT burn
 ```
-env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_burn '{"token_id":"1:2"}' --depositYocto 1
+env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_burn '{"token_id":"1:1"}' --depositYocto 1
 ```
 
 ### NFT approve
