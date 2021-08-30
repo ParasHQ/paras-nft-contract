@@ -22,6 +22,7 @@ pub const TOKEN_DELIMETER: char = ':';
 pub const TITLE_DELIMETER: &str = " #";
 /// e.g. "Title — 2/10" where 10 is max copies
 pub const EDITION_DELIMETER: &str = "/";
+pub const TREASURY_FEE: u128 = 500; // 500 / 10_000 = 0.05
 
 pub type TokenSeriesId = String;
 pub type Payout = HashMap<AccountId, U128>;
@@ -54,6 +55,7 @@ pub struct Contract {
     metadata: LazyOption<NFTContractMetadata>,
     // CUSTOM
 	token_series_by_id: UnorderedMap<TokenSeriesId, TokenSeries>,
+    treasury_id: AccountId,
 }
 
 const DATA_IMAGE_SVG_COMIC_ICON: &str = "data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 79C5.02944 79 1 74.9706 1 70V10C1 5.02944 5.02944 1 10 1H71C75.4183 1 79 4.58172 79 9V70C79 74.9706 74.9706 79 70 79H10Z' fill='%2318162B' stroke='%23C6FF00' stroke-width='2'/%3E%3Cpath d='M71 0L77 3L80 9H71V0Z' fill='%23C6FF00'/%3E%3Cpath d='M9 80L3.5 76.5L0 71H9V80Z' fill='%23C6FF00'/%3E%3Cpath d='M40.7745 64C35.0045 64 30.433 62.3846 27.0598 59.1538C23.6866 55.8782 22 51.2115 22 45.1538V33.8462C22 27.7885 23.6866 23.1442 27.0598 19.9135C30.433 16.6378 35.0045 15 40.7745 15C46.5 15 50.9162 16.5929 54.0231 19.7788C57.1744 22.9199 58.75 27.25 58.75 32.7692V33.1731H50.0951V32.5C50.0951 29.7179 49.3184 27.4295 47.7649 25.6346C46.2559 23.8397 43.9257 22.9423 40.7745 22.9423C37.6676 22.9423 35.2264 23.9071 33.4511 25.8365C31.6757 27.766 30.788 30.391 30.788 33.7115V45.2885C30.788 48.5641 31.6757 51.1891 33.4511 53.1635C35.2264 55.0929 37.6676 56.0577 40.7745 56.0577C43.9257 56.0577 46.2559 55.1603 47.7649 53.3654C49.3184 51.5256 50.0951 49.2372 50.0951 46.5V45.2885H58.75V46.2308C58.75 51.75 57.1744 56.1026 54.0231 59.2885C50.9162 62.4295 46.5 64 40.7745 64Z' fill='%23C6FF00'/%3E%3C/svg%3E";
@@ -74,9 +76,10 @@ enum StorageKey {
 #[near_bindgen]
 impl Contract {
     #[init]
-    pub fn new_default_meta(owner_id: ValidAccountId) -> Self {
+    pub fn new_default_meta(owner_id: ValidAccountId, treasury_id: ValidAccountId) -> Self {
         Self::new(
             owner_id,
+            treasury_id,
             NFTContractMetadata {
                 spec: NFT_METADATA_SPEC.to_string(),
                 name: "Comic by Paras".to_string(),
@@ -90,7 +93,11 @@ impl Contract {
     }
 
     #[init]
-    pub fn new(owner_id: ValidAccountId, metadata: NFTContractMetadata) -> Self {
+    pub fn new(
+        owner_id: ValidAccountId, 
+        treasury_id: ValidAccountId, 
+        metadata: NFTContractMetadata
+    ) -> Self {
         assert!(!env::state_exists(), "Already initialized");
         metadata.assert_valid();
         Self {
@@ -103,7 +110,20 @@ impl Contract {
             ),
             token_series_by_id: UnorderedMap::new(StorageKey::TokenSeriesById),
             metadata: LazyOption::new(StorageKey::Metadata, Some(&metadata)),
+            treasury_id: treasury_id.to_string(),
         }
+    }
+
+    // Treasury
+    #[payable]
+    pub fn set_treasury(&mut self, treasury_id: ValidAccountId) {
+        assert_one_yocto();
+        assert_eq!(
+            env::predecessor_account_id(),
+            self.tokens.owner_id,
+            "Paras: Owner only"
+        );
+        self.treasury_id = treasury_id.to_string();
     }
 
     // CUSTOM
@@ -211,7 +231,11 @@ impl Contract {
             price
         );
         let token_id: TokenId = self._nft_mint_series(token_series_id, receiver_id);
-        Promise::new(token_series.creator_id).transfer(price);
+
+        let for_treasury = price as u128 * TREASURY_FEE / 10_000u128;
+        let price_deducted = price - for_treasury;
+        Promise::new(token_series.creator_id).transfer(price_deducted);
+        Promise::new(self.treasury_id.clone()).transfer(for_treasury);
 
         refund_deposit(env::storage_usage() - initial_storage_usage, price);
         token_id
@@ -329,6 +353,16 @@ impl Contract {
 
         token_series.is_mintable = false;
         self.token_series_by_id.insert(&token_series_id, &token_series);
+        env::log(
+            json!({
+                "type": "nft_set_series_non_mintable",
+                "params": {
+                    "token_series_id": token_series_id,
+                }
+            })
+            .to_string()
+            .as_bytes(),
+        );
     }
 
     #[payable]
@@ -775,8 +809,8 @@ mod tests {
     use near_sdk::MockedBlockchain;
     use near_sdk::{testing_env};
     
-    const STORAGE_FOR_CREATE_SERIES: Balance = 11790000000000000000000;
-    const STORAGE_FOR_MINT: Balance = 18320000000000000000000;
+    const STORAGE_FOR_CREATE_SERIES: Balance = 8540000000000000000000;
+    const STORAGE_FOR_MINT: Balance = 11280000000000000000000;
 
     fn get_context(predecessor_account_id: ValidAccountId) -> VMContextBuilder {
         let mut builder = VMContextBuilder::new();
@@ -790,7 +824,7 @@ mod tests {
     fn setup_contract() -> (VMContextBuilder, Contract) {
         let mut context = VMContextBuilder::new();
         testing_env!(context.predecessor_account_id(accounts(0)).build());
-        let contract = Contract::new_default_meta(accounts(0));
+        let contract = Contract::new_default_meta(accounts(0), accounts(4));
         (context, contract)
     }
 
@@ -800,6 +834,7 @@ mod tests {
         testing_env!(context.build());
         let contract = Contract::new(
             accounts(1),
+            accounts(4),
             NFTContractMetadata {
                 spec: NFT_METADATA_SPEC.to_string(),
                 name: "Triple Triad".to_string(),

@@ -17,8 +17,13 @@ pub const STORAGE_MINT_ESTIMATE: u128 = 11280000000000000000000;
 pub const STORAGE_CREATE_SERIES_ESTIMATE: u128 = 8540000000000000000000;
 pub const STORAGE_APPROVE: u128 = 2610000000000000000000;
 
-pub fn init() -> (UserAccount, ContractAccount<Contract>) {
+pub fn init() -> (UserAccount, ContractAccount<Contract>, UserAccount) {
     let root = init_simulator(None);
+
+    let treasury = root.create_user(
+        "treasury".to_string(),
+        to_yocto("100"),
+    );
 
     let nft_contract = deploy!(
         contract: Contract,
@@ -26,7 +31,8 @@ pub fn init() -> (UserAccount, ContractAccount<Contract>) {
         bytes: &NFT_WASM_BYTES,
         signer_account: root,
         init_method: new_default_meta(
-            root.valid_account_id()
+            root.valid_account_id(),
+            treasury.valid_account_id()
         )
     );
 
@@ -35,12 +41,12 @@ pub fn init() -> (UserAccount, ContractAccount<Contract>) {
         to_yocto("100"),
     );
 
-    (root, nft_contract)
+    (root, nft_contract, treasury)
 }
 
 #[test]
 fn simulate_create_new_series() {
-    let (root, nft) = init();
+    let (root, nft, _) = init();
 
     let initial_storage_usage = nft.account().unwrap().storage_usage;
 
@@ -72,7 +78,7 @@ fn simulate_create_new_series() {
 
 #[test]
 fn simulate_mint() {
-    let (root, nft) = init();
+    let (root, nft, _) = init();
 
     root.call(
         nft.account_id(),
@@ -150,7 +156,7 @@ fn simulate_mint() {
 
 #[test]
 fn simulate_approve() {
-    let (root, nft) = init();
+    let (root, nft, _) = init();
 
     root.call(
         nft.account_id(),
@@ -202,4 +208,55 @@ fn simulate_approve() {
     let storage_price_for_approve = (nft.account().unwrap().storage_usage - initial_storage_usage) as u128 * 10u128.pow(19);
     println!("[APPROVE] Storage price: {} yoctoNEAR", storage_price_for_approve);
     println!("[APPROVE] Gas burnt price: {} TeraGas", outcome.gas_burnt() as f64 / 1e12);
+}
+
+#[test]
+fn simulate_buy() {
+    let (root, nft, treasury) = init();
+
+    let alice = root.create_user("alice".to_string(), to_yocto("100"));
+
+    let alice_balance = alice.account().unwrap().amount;
+    let treasury_balance = treasury.account().unwrap().amount;
+
+    root.call(
+        nft.account_id(),
+        "nft_create_series",
+        &json!({
+            "token_series_id": u128::MAX.to_string(),
+            "token_metadata": {
+                "title": "A".repeat(200),
+                "reference": "A".repeat(59),
+                "media": "A".repeat(59),
+                "copies": 100u64,
+            },
+            "creator_id": alice.account_id(),
+            "price": to_yocto("1").to_string(),
+            "royalty": {
+                "0".repeat(64): 1000u32
+            },
+        }).to_string().into_bytes(),
+        DEFAULT_GAS,
+        to_yocto("1")
+    );
+
+    root.call(
+        nft.account_id(),
+        "nft_buy",
+        &json!({
+            "token_series_id": u128::MAX.to_string(),
+            "receiver_id": root.account_id(),
+        }).to_string().into_bytes(),
+        DEFAULT_GAS,
+        to_yocto("1") + STORAGE_MINT_ESTIMATE
+    );
+
+    let for_treasury = (to_yocto("1") * 500) / 10_000;
+    let for_seller = to_yocto("1") - for_treasury;
+
+    let diff_after_sell_treasury = treasury.account().unwrap().amount - treasury_balance;
+    let diff_after_sell_alice = alice.account().unwrap().amount - alice_balance;
+
+    assert_eq!(for_treasury, diff_after_sell_treasury);
+    assert_eq!(for_seller, diff_after_sell_alice);
 }
