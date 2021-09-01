@@ -22,6 +22,7 @@ pub const TOKEN_DELIMETER: char = ':';
 pub const TITLE_DELIMETER: &str = " #";
 /// e.g. "Title — 2/10" where 10 is max copies
 pub const EDITION_DELIMETER: &str = "/";
+pub const TREASURY_FEE: u128 = 500; // 500 / 10_000 = 0.05
 
 pub type TokenSeriesId = String;
 pub type Payout = HashMap<AccountId, U128>;
@@ -54,6 +55,7 @@ pub struct Contract {
     metadata: LazyOption<NFTContractMetadata>,
     // CUSTOM
 	token_series_by_id: UnorderedMap<TokenSeriesId, TokenSeries>,
+    treasury_id: AccountId,
 }
 
 const DATA_IMAGE_SVG_COMIC_ICON: &str = "data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 79C5.02944 79 1 74.9706 1 70V10C1 5.02944 5.02944 1 10 1H71C75.4183 1 79 4.58172 79 9V70C79 74.9706 74.9706 79 70 79H10Z' fill='%2318162B' stroke='%23C6FF00' stroke-width='2'/%3E%3Cpath d='M71 0L77 3L80 9H71V0Z' fill='%23C6FF00'/%3E%3Cpath d='M9 80L3.5 76.5L0 71H9V80Z' fill='%23C6FF00'/%3E%3Cpath d='M40.7745 64C35.0045 64 30.433 62.3846 27.0598 59.1538C23.6866 55.8782 22 51.2115 22 45.1538V33.8462C22 27.7885 23.6866 23.1442 27.0598 19.9135C30.433 16.6378 35.0045 15 40.7745 15C46.5 15 50.9162 16.5929 54.0231 19.7788C57.1744 22.9199 58.75 27.25 58.75 32.7692V33.1731H50.0951V32.5C50.0951 29.7179 49.3184 27.4295 47.7649 25.6346C46.2559 23.8397 43.9257 22.9423 40.7745 22.9423C37.6676 22.9423 35.2264 23.9071 33.4511 25.8365C31.6757 27.766 30.788 30.391 30.788 33.7115V45.2885C30.788 48.5641 31.6757 51.1891 33.4511 53.1635C35.2264 55.0929 37.6676 56.0577 40.7745 56.0577C43.9257 56.0577 46.2559 55.1603 47.7649 53.3654C49.3184 51.5256 50.0951 49.2372 50.0951 46.5V45.2885H58.75V46.2308C58.75 51.75 57.1744 56.1026 54.0231 59.2885C50.9162 62.4295 46.5 64 40.7745 64Z' fill='%23C6FF00'/%3E%3C/svg%3E";
@@ -74,9 +76,10 @@ enum StorageKey {
 #[near_bindgen]
 impl Contract {
     #[init]
-    pub fn new_default_meta(owner_id: ValidAccountId) -> Self {
+    pub fn new_default_meta(owner_id: ValidAccountId, treasury_id: ValidAccountId) -> Self {
         Self::new(
             owner_id,
+            treasury_id,
             NFTContractMetadata {
                 spec: NFT_METADATA_SPEC.to_string(),
                 name: "Paras".to_string(),
@@ -90,7 +93,11 @@ impl Contract {
     }
 
     #[init]
-    pub fn new(owner_id: ValidAccountId, metadata: NFTContractMetadata) -> Self {
+    pub fn new(
+        owner_id: ValidAccountId, 
+        treasury_id: ValidAccountId, 
+        metadata: NFTContractMetadata
+    ) -> Self {
         assert!(!env::state_exists(), "Already initialized");
         metadata.assert_valid();
         Self {
@@ -103,7 +110,20 @@ impl Contract {
             ),
             token_series_by_id: UnorderedMap::new(StorageKey::TokenSeriesById),
             metadata: LazyOption::new(StorageKey::Metadata, Some(&metadata)),
+            treasury_id: treasury_id.to_string(),
         }
+    }
+
+    // Treasury
+    #[payable]
+    pub fn set_treasury(&mut self, treasury_id: ValidAccountId) {
+        assert_one_yocto();
+        assert_eq!(
+            env::predecessor_account_id(),
+            self.tokens.owner_id,
+            "Paras: Owner only"
+        );
+        self.treasury_id = treasury_id.to_string();
     }
 
     // CUSTOM
@@ -111,7 +131,7 @@ impl Contract {
     #[payable]
     pub fn nft_create_series(
         &mut self,
-        token_series_id: U64,
+        token_series_id: U128,
         token_metadata: TokenMetadata,
         creator_id: ValidAccountId,
         price: Option<U128>,
@@ -195,19 +215,27 @@ impl Contract {
     }
 
     #[payable]
-    pub fn nft_buy(&mut self, token_series_id: TokenSeriesId, receiver_id: ValidAccountId) -> TokenId {
+    pub fn nft_buy(
+        &mut self, 
+        token_series_id: TokenSeriesId, 
+        receiver_id: ValidAccountId
+    ) -> TokenId {
         let initial_storage_usage = env::storage_usage();
 
         let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
-        let price: u128 = token_series.price.unwrap();
+        let price: u128 = token_series.price.expect("Paras: not for sale");
         let attached_deposit = env::attached_deposit();
         assert!(
             attached_deposit >= price,
             "Paras: attached deposit is less than price : {}",
             price
         );
-        let token_id: TokenId = self._nft_mint_series(&token_series_id, &receiver_id.into(), &env::block_timestamp().to_string(), &String::from("1"));
-        Promise::new(token_series.creator_id).transfer(price);
+        let token_id: TokenId = self._nft_mint_series(&token_series_id, &receiver_id.into(), &env::block_timestamp().to_string(), &"1".to_string());
+
+        let for_treasury = price as u128 * TREASURY_FEE / 10_000u128;
+        let price_deducted = price - for_treasury;
+        Promise::new(token_series.creator_id).transfer(price_deducted);
+        Promise::new(self.treasury_id.clone()).transfer(for_treasury);
 
         refund_deposit(env::storage_usage() - initial_storage_usage, price);
         token_id
@@ -318,7 +346,6 @@ impl Contract {
             tokens_per_owner.insert(&owner_id, &token_ids);
         }
 
-
         env::log(
             json!({
                 "type": "nft_transfer",
@@ -354,6 +381,16 @@ impl Contract {
 
         token_series.is_mintable = false;
         self.token_series_by_id.insert(&token_series_id, &token_series);
+        env::log(
+            json!({
+                "type": "nft_set_series_non_mintable",
+                "params": {
+                    "token_series_id": token_series_id,
+                }
+            })
+            .to_string()
+            .as_bytes(),
+        );
     }
 
     #[payable]
@@ -735,6 +772,10 @@ impl Contract {
         );
         payout
     }
+
+    pub fn get_owner(&self) -> AccountId {
+        self.tokens.owner_id.clone()
+    }
 }
 
 fn royalty_to_payout(a: u32, b: Balance) -> U128 {
@@ -786,5 +827,393 @@ fn refund_deposit(storage_used: u64, extra_spend: Balance) {
     let refund = attached_deposit - required_cost;
     if refund > 1 {
         Promise::new(env::predecessor_account_id()).transfer(refund);
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::*;
+    use near_sdk::test_utils::{accounts, VMContextBuilder};
+    use near_sdk::MockedBlockchain;
+    use near_sdk::{testing_env};
+    
+    const STORAGE_FOR_CREATE_SERIES: Balance = 8540000000000000000000;
+    const STORAGE_FOR_MINT: Balance = 11280000000000000000000;
+
+    fn get_context(predecessor_account_id: ValidAccountId) -> VMContextBuilder {
+        let mut builder = VMContextBuilder::new();
+        builder
+            .current_account_id(accounts(0))
+            .signer_account_id(predecessor_account_id.clone())
+            .predecessor_account_id(predecessor_account_id);
+        builder
+    }
+
+    fn setup_contract() -> (VMContextBuilder, Contract) {
+        let mut context = VMContextBuilder::new();
+        testing_env!(context.predecessor_account_id(accounts(0)).build());
+        let contract = Contract::new_default_meta(accounts(0), accounts(4));
+        (context, contract)
+    }
+
+    #[test]
+    fn test_new() {
+        let mut context = get_context(accounts(1));
+        testing_env!(context.build());
+        let contract = Contract::new(
+            accounts(1),
+            accounts(4),
+            NFTContractMetadata {
+                spec: NFT_METADATA_SPEC.to_string(),
+                name: "Triple Triad".to_string(),
+                symbol: "TRIAD".to_string(),
+                icon: Some(DATA_IMAGE_SVG_COMIC_ICON.to_string()),
+                base_uri: Some("https://ipfs.fleek.co/ipfs/".to_string()),
+                reference: None,
+                reference_hash: None,
+            }
+        );
+        testing_env!(context.is_view(true).build());
+        assert_eq!(contract.get_owner(), accounts(1).to_string());
+        assert_eq!(contract.nft_metadata().base_uri.unwrap(), "https://ipfs.fleek.co/ipfs/".to_string());
+        assert_eq!(contract.nft_metadata().icon.unwrap(), DATA_IMAGE_SVG_COMIC_ICON.to_string());
+    }
+
+    fn create_series(
+        contract: &mut Contract, 
+        token_series_id: U128, 
+        royalty: &HashMap<AccountId, u32>,
+        price: Option<U128>,
+    ) {
+        contract.nft_create_series(
+            token_series_id,
+            TokenMetadata {
+                title: Some("Tsundere land".to_string()),
+                description: None,
+                media: Some(
+                    "bafybeidzcan4nzcz7sczs4yzyxly4galgygnbjewipj6haco4kffoqpkiy".to_string()
+                ),
+                media_hash: None,
+                copies: Some(10),
+                issued_at: None,
+                expires_at: None,
+                starts_at: None,
+                updated_at: None,
+                extra: None,
+                reference: Some(
+                    "bafybeicg4ss7qh5odijfn2eogizuxkrdh3zlv4eftcmgnljwu7dm64uwji".to_string()
+                ),
+                reference_hash: None,
+            },
+            accounts(1),
+            price,
+            Some(royalty.clone()),
+        );
+    }
+
+    #[test]
+    fn test_create_series() {
+        let (mut context, mut contract) = setup_contract();
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
+            .build()
+        );
+
+        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
+        royalty.insert(accounts(1).to_string(), 1000);
+        create_series(&mut contract, U128::from(1), &royalty, Some(U128::from(1 * 10u128.pow(24))));
+
+        let nft_series_return = contract.nft_get_series_single("1".to_string());
+        assert_eq!(
+            nft_series_return.creator_id,
+            accounts(1).to_string()
+        );
+
+        assert_eq!(
+            nft_series_return.token_series_id,
+            "1",
+        );
+
+        assert_eq!(
+            nft_series_return.royalty,
+            royalty,
+        );
+
+        assert_eq!(
+            nft_series_return.metadata.copies.unwrap(),
+            10
+        );
+
+        assert_eq!(
+            nft_series_return.metadata.title.unwrap(),
+            "Tsundere land".to_string()
+        );
+
+        assert_eq!(
+            nft_series_return.metadata.reference.unwrap(),
+            "bafybeicg4ss7qh5odijfn2eogizuxkrdh3zlv4eftcmgnljwu7dm64uwji".to_string()
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Paras: duplicate token_series_id")]
+    fn test_invalid_duplicate_token_series() {
+        let (mut context, mut contract) = setup_contract();
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
+            .build()
+        );
+
+        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
+        royalty.insert(accounts(1).to_string(), 1000);
+
+        create_series(&mut contract, U128::from(1), &royalty, Some(U128::from(1 * 10u128.pow(24))));
+        create_series(&mut contract, U128::from(1), &royalty, Some(U128::from(1 * 10u128.pow(24))));
+    }
+
+    #[test]
+    fn test_buy() {
+        let (mut context, mut contract) = setup_contract();
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
+            .build()
+        );
+
+        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
+        royalty.insert(accounts(1).to_string(), 1000);
+
+        create_series(&mut contract, U128::from(1), &royalty, Some(U128::from(1 * 10u128.pow(24))));
+
+        testing_env!(context
+            .predecessor_account_id(accounts(2))
+            .attached_deposit(1 * 10u128.pow(24) + STORAGE_FOR_MINT)
+            .build()
+        );
+
+        let token_id = contract.nft_buy("1".to_string(), accounts(2));
+
+        let token_from_nft_token = contract.nft_token(token_id);
+        assert_eq!(
+            token_from_nft_token.unwrap().owner_id,
+            accounts(2).to_string()
+        )
+    }
+
+    #[test]
+    fn test_mint() {
+        let (mut context, mut contract) = setup_contract();
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
+            .build()
+        );
+
+        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
+        royalty.insert(accounts(1).to_string(), 1000);
+
+        create_series(&mut contract, U128::from(1), &royalty, None);
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_MINT)
+            .build()
+        );
+
+        let token_id = contract.nft_mint("1".to_string(), accounts(2), U64::from(1));
+
+        let token_from_nft_token = contract.nft_token(token_id);
+        assert_eq!(
+            token_from_nft_token.unwrap().owner_id,
+            accounts(2).to_string()
+        )
+    }
+
+    #[test]
+    #[should_panic(expected = "Paras: Token series is not mintable")]
+    fn test_invalid_mint_non_mintable() {
+        let (mut context, mut contract) = setup_contract();
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
+            .build()
+        );
+
+        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
+        royalty.insert(accounts(1).to_string(), 1000);
+
+        create_series(&mut contract, U128::from(1), &royalty, None);
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(1)
+            .build()
+        );
+        contract.nft_set_series_non_mintable("1".to_string());
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_MINT)
+            .build()
+        );
+
+        contract.nft_mint("1".to_string(), accounts(2), U64::from(1));
+    }
+
+    #[test]
+    #[should_panic( expected = "Paras: not for sale" )]
+    fn test_invalid_buy_price_null() {
+        let (mut context, mut contract) = setup_contract();
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
+            .build()
+        );
+
+        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
+        royalty.insert(accounts(1).to_string(), 1000);
+
+        create_series(&mut contract, U128::from(1), &royalty, None);
+
+        testing_env!(context
+            .predecessor_account_id(accounts(2))
+            .attached_deposit(1 * 10u128.pow(24) + STORAGE_FOR_MINT)
+            .build()
+        );
+
+        let token_id = contract.nft_buy("1".to_string(), accounts(2));
+
+        let token_from_nft_token = contract.nft_token(token_id);
+        assert_eq!(
+            token_from_nft_token.unwrap().owner_id,
+            accounts(2).to_string()
+        )
+    }
+
+    #[test]
+    fn test_nft_burn() {
+        let (mut context, mut contract) = setup_contract();
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
+            .build()
+        );
+
+        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
+        royalty.insert(accounts(1).to_string(), 1000);
+
+        create_series(&mut contract, U128::from(1), &royalty, None);
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_MINT)
+            .build()
+        );
+
+        let token_id = contract.nft_mint("1".to_string(), accounts(2), U64::from(1));
+
+        testing_env!(context
+            .predecessor_account_id(accounts(2))
+            .attached_deposit(1)
+            .build()
+        );
+
+        contract.nft_burn(token_id.clone());
+        let token = contract.nft_token(token_id);
+        assert!(token.is_none());
+    }
+
+    #[test]
+    fn test_nft_transfer() {
+        let (mut context, mut contract) = setup_contract();
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
+            .build()
+        );
+
+        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
+        royalty.insert(accounts(1).to_string(), 1000);
+
+        create_series(&mut contract, U128::from(1), &royalty, None);
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_MINT)
+            .build()
+        );
+
+        let token_id = contract.nft_mint("1".to_string(), accounts(2), U64::from(1));
+
+        testing_env!(context
+            .predecessor_account_id(accounts(2))
+            .attached_deposit(1)
+            .build()
+        );
+
+        contract.nft_transfer(accounts(3), token_id.clone(), None, None);
+
+        let token = contract.nft_token(token_id).unwrap();
+        assert_eq!(
+            token.owner_id,
+            accounts(3).to_string()
+        )
+    }
+
+    #[test]
+    fn test_nft_transfer_payout() {
+        let (mut context, mut contract) = setup_contract();
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
+            .build()
+        );
+
+        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
+        royalty.insert(accounts(1).to_string(), 1000);
+
+        create_series(&mut contract, U128::from(1), &royalty, None);
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_MINT)
+            .build()
+        );
+
+        let token_id = contract.nft_mint("1".to_string(), accounts(2), U64::from(1));
+
+        testing_env!(context
+            .predecessor_account_id(accounts(2))
+            .attached_deposit(1)
+            .build()
+        );
+
+        let payout = contract.nft_transfer_payout(
+            accounts(3), 
+            token_id.clone(), 
+            U64::from(0), 
+            U128::from(1 * 10u128.pow(24)),
+            10
+        );
+
+        let mut payout_calc: HashMap<AccountId, U128> = HashMap::new();
+        payout_calc.insert(
+            accounts(1).to_string(), 
+            U128::from((1000 * (1 * 10u128.pow(24)))/10_000)
+        );
+        payout_calc.insert(
+            accounts(2).to_string(), 
+            U128::from((9000 * (1 * 10u128.pow(24))) / 10_000)
+        );
+
+        assert_eq!(payout, payout_calc);
+
+        let token = contract.nft_token(token_id).unwrap();
+        assert_eq!(
+            token.owner_id,
+            accounts(3).to_string()
+        )
     }
 }

@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "license": "MIT",
   "scripts": {
-    "build:contract": "cd contract && ./build.sh && cd ..",
+    "build:contract": "./build.sh",
     "patch:config": "node ./utils/patch-config.js",
     "dev:deploy": "yarn build:contract && rm -rf neardev && (near dev-deploy || exit 0) && yarn patch:config",
-    "test:deploy": "yarn dev:deploy && mocha",
-    "test": "mocha"
+    "test:deploy": "yarn dev:deploy && yarn test",
+    "test": "cargo test --all -- --nocapture --color always"
   },
   "dependencies": {
     "mocha": "^9.0.1"

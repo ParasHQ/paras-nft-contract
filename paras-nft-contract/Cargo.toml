@@ -1,5 +1,5 @@
 [package]
-name = "paras-comic-nft-contract"
+name = "paras-nft-contract"
 version = "0.1.0"
 authors = ["Irfianto <irfi@paras.id>"]
 edition = "2018"
