@@ -776,6 +776,10 @@ impl Contract {
     pub fn get_owner(&self) -> AccountId {
         self.tokens.owner_id.clone()
     }
+
+    pub fn nft_migrate(&self, receiver_id: ValidAccountId) -> AccountId {
+        receiver_id.into()
+    }
 }
 
 fn royalty_to_payout(a: u32, b: Balance) -> U128 {
