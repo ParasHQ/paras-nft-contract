@@ -65,6 +65,11 @@ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --acc
 env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId alice.test.near comic.test.near nft_set_series_price '{"token_series_id":"1", "price": "2000000000000000000000000"}' --depositYocto 1
 ```
 
+### NFT set series not for sale (Creator only)
+```
+env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId alice.test.near comic.test.near nft_set_series_price '{"token_series_id":"1"}' --depositYocto 1
+```
+
 ### NFT burn
 ```
 env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near nft_burn '{"token_id":"1:1"}' --depositYocto 1
