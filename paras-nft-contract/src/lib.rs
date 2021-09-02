@@ -351,6 +351,12 @@ impl Contract {
             "Paras: already non-mintable"
         );
 
+        assert_eq!(
+            token_series.metadata.copies,
+            None,
+            "Paras: decrease supply if copies not null"
+        );
+
         token_series.is_mintable = false;
         self.token_series_by_id.insert(&token_series_id, &token_series);
         env::log(
@@ -363,6 +369,36 @@ impl Contract {
             .to_string()
             .as_bytes(),
         );
+    }
+
+    #[payable]
+    pub fn nft_decrease_series_copies(
+        &mut self, 
+        token_series_id: TokenSeriesId, 
+        decrease_copies: U64
+    ) -> U64 {
+        assert_one_yocto();
+
+        let mut token_series = self.token_series_by_id.get(&token_series_id).expect("Token series not exist");
+        assert_eq!(
+            env::predecessor_account_id(),
+            token_series.creator_id,
+            "Paras: Creator only"
+        );
+
+        let minted_copies = token_series.tokens.len();
+        let copies = token_series.metadata.copies.unwrap();
+
+        assert!(
+            (copies - decrease_copies.0) >= minted_copies,
+            "Paras: cannot decrease supply, already minted : {}", minted_copies
+        );
+
+        token_series.metadata.copies = Some(copies - decrease_copies.0);
+
+        self.token_series_by_id.insert(&token_series_id, &token_series);
+
+        U64::from(token_series.metadata.copies.unwrap())
     }
 
     #[payable]
@@ -856,6 +892,7 @@ mod tests {
         token_series_id: U128, 
         royalty: &HashMap<AccountId, u32>,
         price: Option<U128>,
+        copies: Option<u64>,
     ) {
         contract.nft_create_series(
             token_series_id,
@@ -866,7 +903,7 @@ mod tests {
                     "bafybeidzcan4nzcz7sczs4yzyxly4galgygnbjewipj6haco4kffoqpkiy".to_string()
                 ),
                 media_hash: None,
-                copies: Some(10),
+                copies: copies,
                 issued_at: None,
                 expires_at: None,
                 starts_at: None,
@@ -894,7 +931,13 @@ mod tests {
 
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
-        create_series(&mut contract, U128::from(1), &royalty, Some(U128::from(1 * 10u128.pow(24))));
+        create_series(
+            &mut contract, 
+            U128::from(1), 
+            &royalty, 
+            Some(U128::from(1 * 10u128.pow(24))),
+            None
+        );
 
         let nft_series_return = contract.nft_get_series_single("1".to_string());
         assert_eq!(
@@ -912,9 +955,8 @@ mod tests {
             royalty,
         );
 
-        assert_eq!(
-            nft_series_return.metadata.copies.unwrap(),
-            10
+        assert!(
+            nft_series_return.metadata.copies.is_none()
         );
 
         assert_eq!(
@@ -941,8 +983,21 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U128::from(1), &royalty, Some(U128::from(1 * 10u128.pow(24))));
-        create_series(&mut contract, U128::from(1), &royalty, Some(U128::from(1 * 10u128.pow(24))));
+        create_series(
+            &mut contract, 
+            U128::from(1), 
+            &royalty, 
+            Some(U128::from(1 * 10u128.pow(24))),
+            None
+        );
+
+        create_series(
+            &mut contract, 
+            U128::from(1), 
+            &royalty, 
+            Some(U128::from(1 * 10u128.pow(24))),
+            None
+        );
     }
 
     #[test]
@@ -957,7 +1012,13 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U128::from(1), &royalty, Some(U128::from(1 * 10u128.pow(24))));
+        create_series(
+            &mut contract, 
+            U128::from(1), 
+            &royalty, 
+            Some(U128::from(1 * 10u128.pow(24))),
+            None
+        );
 
         testing_env!(context
             .predecessor_account_id(accounts(2))
@@ -986,7 +1047,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U128::from(1), &royalty, None);
+        create_series(&mut contract, U128::from(1), &royalty, None, None);
 
         testing_env!(context
             .predecessor_account_id(accounts(1))
@@ -1016,7 +1077,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U128::from(1), &royalty, None);
+        create_series(&mut contract, U128::from(1), &royalty, None, None);
 
         testing_env!(context
             .predecessor_account_id(accounts(1))
@@ -1035,6 +1096,96 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "Paras: Token series is not mintable")]
+    fn test_invalid_mint_above_copies() {
+        let (mut context, mut contract) = setup_contract();
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
+            .build()
+        );
+
+        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
+        royalty.insert(accounts(1).to_string(), 1000);
+
+        create_series(&mut contract, U128::from(1), &royalty, None, Some(1));
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_MINT)
+            .build()
+        );
+
+        contract.nft_mint("1".to_string(), accounts(2));
+        contract.nft_mint("1".to_string(), accounts(2));
+    }
+
+    #[test]
+    fn test_decrease_copies() {
+        let (mut context, mut contract) = setup_contract();
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
+            .build()
+        );
+
+        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
+        royalty.insert(accounts(1).to_string(), 1000);
+
+        create_series(&mut contract, U128::from(1), &royalty, None, Some(5));
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_MINT)
+            .build()
+        );
+
+        contract.nft_mint("1".to_string(), accounts(2));
+        contract.nft_mint("1".to_string(), accounts(2));
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(1)
+            .build()
+        );
+
+        contract.nft_decrease_series_copies("1".to_string(), U64::from(3));
+    }
+
+    #[test]
+    #[should_panic(expected = "Paras: cannot decrease supply, already minted : 2")]
+    fn test_invalid_decrease_copies() {
+        let (mut context, mut contract) = setup_contract();
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
+            .build()
+        );
+
+        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
+        royalty.insert(accounts(1).to_string(), 1000);
+
+        create_series(&mut contract, U128::from(1), &royalty, None, Some(5));
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_MINT)
+            .build()
+        );
+
+        contract.nft_mint("1".to_string(), accounts(2));
+        contract.nft_mint("1".to_string(), accounts(2));
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(1)
+            .build()
+        );
+
+        contract.nft_decrease_series_copies("1".to_string(), U64::from(4));
+    }
+
+    #[test]
     #[should_panic( expected = "Paras: not for sale" )]
     fn test_invalid_buy_price_null() {
         let (mut context, mut contract) = setup_contract();
@@ -1047,7 +1198,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U128::from(1), &royalty, None);
+        create_series(&mut contract, U128::from(1), &royalty, None, None);
 
         testing_env!(context
             .predecessor_account_id(accounts(2))
@@ -1076,7 +1227,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U128::from(1), &royalty, None);
+        create_series(&mut contract, U128::from(1), &royalty, None, None);
 
         testing_env!(context
             .predecessor_account_id(accounts(1))
@@ -1109,7 +1260,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U128::from(1), &royalty, None);
+        create_series(&mut contract, U128::from(1), &royalty, None, None);
 
         testing_env!(context
             .predecessor_account_id(accounts(1))
@@ -1146,7 +1297,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U128::from(1), &royalty, None);
+        create_series(&mut contract, U128::from(1), &royalty, None, None);
 
         testing_env!(context
             .predecessor_account_id(accounts(1))
