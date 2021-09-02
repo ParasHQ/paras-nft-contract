@@ -1,9 +1,8 @@
 use paras_nft_contract::ContractContract as Contract;
 use near_sdk_sim::{
-    call, deploy, init_simulator, to_yocto, ContractAccount, UserAccount, DEFAULT_GAS, STORAGE_AMOUNT,
+    deploy, init_simulator, to_yocto, ContractAccount, UserAccount, DEFAULT_GAS
 };
 use near_sdk::serde_json::json;
-use std::collections::HashMap;
 
 
 pub const NFT_CONTRACT_ID: &str = "nft";
@@ -12,7 +11,7 @@ near_sdk_sim::lazy_static_include::lazy_static_include_bytes! {
     NFT_WASM_BYTES => "out/main.wasm",
 }
 
-// Added after running simulation test
+// Added after running simulation test -> with max token series id and 64 byte account
 pub const STORAGE_MINT_ESTIMATE: u128 = 11280000000000000000000;
 pub const STORAGE_CREATE_SERIES_ESTIMATE: u128 = 8540000000000000000000;
 pub const STORAGE_APPROVE: u128 = 2610000000000000000000;
@@ -54,14 +53,12 @@ fn simulate_create_new_series() {
         nft.account_id(),
         "nft_create_series",
         &json!({
-            "token_series_id": u128::MAX.to_string(),
             "token_metadata": {
                 "title": "A".repeat(200),
                 "reference": "A".repeat(59),
                 "media": "A".repeat(59),
                 "copies": 100u64,
             },
-            "creator_id": "0".repeat(64),
             "price": to_yocto("1").to_string(),
             "royalty": {
                 "0".repeat(64): 1000u32
@@ -84,14 +81,12 @@ fn simulate_mint() {
         nft.account_id(),
         "nft_create_series",
         &json!({
-            "token_series_id": u128::MAX.to_string(),
             "token_metadata": {
                 "title": "A".repeat(200),
                 "reference": "A".repeat(59),
                 "media": "A".repeat(59),
                 "copies": 100u64,
             },
-            "creator_id": "0".repeat(64),
             "price": to_yocto("1").to_string(),
             "royalty": {
                 "0".repeat(64): 1000u32
@@ -107,7 +102,7 @@ fn simulate_mint() {
         nft.account_id(),
         "nft_buy",
         &json!({
-            "token_series_id": u128::MAX.to_string(),
+            "token_series_id": "1",
             "receiver_id": "a".repeat(64),
         }).to_string().into_bytes(),
         DEFAULT_GAS,
@@ -124,7 +119,7 @@ fn simulate_mint() {
         nft.account_id(),
         "nft_buy",
         &json!({
-            "token_series_id": u128::MAX.to_string(),
+            "token_series_id": "1",
             "receiver_id": "b".repeat(64),
         }).to_string().into_bytes(),
         DEFAULT_GAS,
@@ -141,7 +136,7 @@ fn simulate_mint() {
         nft.account_id(),
         "nft_buy",
         &json!({
-            "token_series_id": u128::MAX.to_string(),
+            "token_series_id": "1",
             "receiver_id": "c".repeat(64),
         }).to_string().into_bytes(),
         DEFAULT_GAS,
@@ -162,14 +157,12 @@ fn simulate_approve() {
         nft.account_id(),
         "nft_create_series",
         &json!({
-            "token_series_id": u128::MAX.to_string(),
             "token_metadata": {
                 "title": "A".repeat(200),
                 "reference": "A".repeat(59),
                 "media": "A".repeat(59),
                 "copies": 100u64,
             },
-            "creator_id": "0".repeat(64),
             "price": to_yocto("1").to_string(),
             "royalty": {
                 "0".repeat(64): 1000u32
@@ -197,7 +190,7 @@ fn simulate_approve() {
         nft.account_id(),
         "nft_approve",
         &json!({
-            "token_id": format!("{}:{}", u128::MAX.to_string(), "1"),
+            "token_id": format!("1:1"),
             "account_id": "test".repeat(16),
             "msg": "{\"price\":\"3000000000000000000000000\",\"ft_token_id\":\"near\"}",
         }).to_string().into_bytes(),
@@ -216,21 +209,18 @@ fn simulate_buy() {
 
     let alice = root.create_user("alice".to_string(), to_yocto("100"));
 
-    let alice_balance = alice.account().unwrap().amount;
     let treasury_balance = treasury.account().unwrap().amount;
 
-    root.call(
+    alice.call(
         nft.account_id(),
         "nft_create_series",
         &json!({
-            "token_series_id": u128::MAX.to_string(),
             "token_metadata": {
                 "title": "A".repeat(200),
                 "reference": "A".repeat(59),
                 "media": "A".repeat(59),
                 "copies": 100u64,
             },
-            "creator_id": alice.account_id(),
             "price": to_yocto("1").to_string(),
             "royalty": {
                 "0".repeat(64): 1000u32
@@ -240,11 +230,13 @@ fn simulate_buy() {
         to_yocto("1")
     );
 
+    let alice_balance = alice.account().unwrap().amount;
+
     root.call(
         nft.account_id(),
         "nft_buy",
         &json!({
-            "token_series_id": u128::MAX.to_string(),
+            "token_series_id": "1",
             "receiver_id": root.account_id(),
         }).to_string().into_bytes(),
         DEFAULT_GAS,

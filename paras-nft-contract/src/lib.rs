@@ -131,20 +131,14 @@ impl Contract {
     #[payable]
     pub fn nft_create_series(
         &mut self,
-        token_series_id: U128,
         token_metadata: TokenMetadata,
-        creator_id: ValidAccountId,
         price: Option<U128>,
         royalty: Option<HashMap<AccountId, u32>>,
     ) -> TokenSeriesJson {
         let initial_storage_usage = env::storage_usage();
-        let owner_id = env::predecessor_account_id();
-        assert_eq!(
-            owner_id, self.tokens.owner_id,
-            "Paras: Only owner can set series"
-        );
+        let creator_id = env::predecessor_account_id();
 
-        let token_series_id: String = format!("{}", token_series_id.0);
+        let token_series_id = format!("{}", (self.token_series_by_id.len() + 1));
 
         assert!(
             self.token_series_by_id.get(&token_series_id).is_none(),
@@ -152,22 +146,28 @@ impl Contract {
         );
 
         let title = token_metadata.title.clone();
-        assert!(title.is_some(), "token_metadata.title is required");
+        assert!(title.is_some(), "Paras: token_metadata.title is required");
         
+
         let mut total_perpetual = 0;
+        let mut total_accounts = 0;
         let royalty_res = if let Some(royalty) = royalty {
             for (_, v) in royalty.iter() {
                 total_perpetual += *v;
+                total_accounts += 1;
             }
             royalty
         } else {
             HashMap::new()
         };
 
+        assert!(total_accounts <= 10, "Paras: royalty exceeds 10 accounts");
+
         assert!(
             total_perpetual <= 9000,
-            "Exceeds maximum royalty : 9000",
+            "Paras Exceeds maximum royalty -> 9000",
         );
+
         let price_res: Option<u128> = if price.is_some() {
             Some(price.unwrap().0)
         } else {
@@ -899,13 +899,11 @@ mod tests {
 
     fn create_series(
         contract: &mut Contract, 
-        token_series_id: U128, 
         royalty: &HashMap<AccountId, u32>,
         price: Option<U128>,
         copies: Option<u64>,
     ) {
         contract.nft_create_series(
-            token_series_id,
             TokenMetadata {
                 title: Some("Tsundere land".to_string()),
                 description: None,
@@ -924,7 +922,6 @@ mod tests {
                 ),
                 reference_hash: None,
             },
-            accounts(1),
             price,
             Some(royalty.clone()),
         );
@@ -934,7 +931,7 @@ mod tests {
     fn test_create_series() {
         let (mut context, mut contract) = setup_contract();
         testing_env!(context
-            .predecessor_account_id(accounts(0))
+            .predecessor_account_id(accounts(1))
             .attached_deposit(STORAGE_FOR_CREATE_SERIES)
             .build()
         );
@@ -943,7 +940,6 @@ mod tests {
         royalty.insert(accounts(1).to_string(), 1000);
         create_series(
             &mut contract, 
-            U128::from(1), 
             &royalty, 
             Some(U128::from(1 * 10u128.pow(24))),
             None
@@ -978,43 +974,14 @@ mod tests {
             nft_series_return.metadata.reference.unwrap(),
             "bafybeicg4ss7qh5odijfn2eogizuxkrdh3zlv4eftcmgnljwu7dm64uwji".to_string()
         );
-    }
 
-    #[test]
-    #[should_panic(expected = "Paras: duplicate token_series_id")]
-    fn test_invalid_duplicate_token_series() {
-        let (mut context, mut contract) = setup_contract();
-        testing_env!(context
-            .predecessor_account_id(accounts(0))
-            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
-            .build()
-        );
-
-        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
-        royalty.insert(accounts(1).to_string(), 1000);
-
-        create_series(
-            &mut contract, 
-            U128::from(1), 
-            &royalty, 
-            Some(U128::from(1 * 10u128.pow(24))),
-            None
-        );
-
-        create_series(
-            &mut contract, 
-            U128::from(1), 
-            &royalty, 
-            Some(U128::from(1 * 10u128.pow(24))),
-            None
-        );
     }
 
     #[test]
     fn test_buy() {
         let (mut context, mut contract) = setup_contract();
         testing_env!(context
-            .predecessor_account_id(accounts(0))
+            .predecessor_account_id(accounts(1))
             .attached_deposit(STORAGE_FOR_CREATE_SERIES)
             .build()
         );
@@ -1024,7 +991,6 @@ mod tests {
 
         create_series(
             &mut contract, 
-            U128::from(1), 
             &royalty, 
             Some(U128::from(1 * 10u128.pow(24))),
             None
@@ -1049,7 +1015,7 @@ mod tests {
     fn test_mint() {
         let (mut context, mut contract) = setup_contract();
         testing_env!(context
-            .predecessor_account_id(accounts(0))
+            .predecessor_account_id(accounts(1))
             .attached_deposit(STORAGE_FOR_CREATE_SERIES)
             .build()
         );
@@ -1057,7 +1023,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U128::from(1), &royalty, None, None);
+        create_series(&mut contract, &royalty, None, None);
 
         testing_env!(context
             .predecessor_account_id(accounts(1))
@@ -1079,7 +1045,7 @@ mod tests {
     fn test_invalid_mint_non_mintable() {
         let (mut context, mut contract) = setup_contract();
         testing_env!(context
-            .predecessor_account_id(accounts(0))
+            .predecessor_account_id(accounts(1))
             .attached_deposit(STORAGE_FOR_CREATE_SERIES)
             .build()
         );
@@ -1087,7 +1053,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U128::from(1), &royalty, None, None);
+        create_series(&mut contract, &royalty, None, None);
 
         testing_env!(context
             .predecessor_account_id(accounts(1))
@@ -1110,7 +1076,7 @@ mod tests {
     fn test_invalid_mint_above_copies() {
         let (mut context, mut contract) = setup_contract();
         testing_env!(context
-            .predecessor_account_id(accounts(0))
+            .predecessor_account_id(accounts(1))
             .attached_deposit(STORAGE_FOR_CREATE_SERIES)
             .build()
         );
@@ -1118,7 +1084,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U128::from(1), &royalty, None, Some(1));
+        create_series(&mut contract, &royalty, None, Some(1));
 
         testing_env!(context
             .predecessor_account_id(accounts(1))
@@ -1134,7 +1100,7 @@ mod tests {
     fn test_decrease_copies() {
         let (mut context, mut contract) = setup_contract();
         testing_env!(context
-            .predecessor_account_id(accounts(0))
+            .predecessor_account_id(accounts(1))
             .attached_deposit(STORAGE_FOR_CREATE_SERIES)
             .build()
         );
@@ -1142,7 +1108,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U128::from(1), &royalty, None, Some(5));
+        create_series(&mut contract, &royalty, None, Some(5));
 
         testing_env!(context
             .predecessor_account_id(accounts(1))
@@ -1167,7 +1133,7 @@ mod tests {
     fn test_invalid_decrease_copies() {
         let (mut context, mut contract) = setup_contract();
         testing_env!(context
-            .predecessor_account_id(accounts(0))
+            .predecessor_account_id(accounts(1))
             .attached_deposit(STORAGE_FOR_CREATE_SERIES)
             .build()
         );
@@ -1175,7 +1141,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U128::from(1), &royalty, None, Some(5));
+        create_series(&mut contract, &royalty, None, Some(5));
 
         testing_env!(context
             .predecessor_account_id(accounts(1))
@@ -1200,7 +1166,7 @@ mod tests {
     fn test_invalid_buy_price_null() {
         let (mut context, mut contract) = setup_contract();
         testing_env!(context
-            .predecessor_account_id(accounts(0))
+            .predecessor_account_id(accounts(1))
             .attached_deposit(STORAGE_FOR_CREATE_SERIES)
             .build()
         );
@@ -1208,7 +1174,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U128::from(1), &royalty, None, None);
+        create_series(&mut contract, &royalty, None, None);
 
         testing_env!(context
             .predecessor_account_id(accounts(2))
@@ -1229,7 +1195,7 @@ mod tests {
     fn test_nft_burn() {
         let (mut context, mut contract) = setup_contract();
         testing_env!(context
-            .predecessor_account_id(accounts(0))
+            .predecessor_account_id(accounts(1))
             .attached_deposit(STORAGE_FOR_CREATE_SERIES)
             .build()
         );
@@ -1237,7 +1203,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U128::from(1), &royalty, None, None);
+        create_series(&mut contract, &royalty, None, None);
 
         testing_env!(context
             .predecessor_account_id(accounts(1))
@@ -1262,7 +1228,7 @@ mod tests {
     fn test_nft_transfer() {
         let (mut context, mut contract) = setup_contract();
         testing_env!(context
-            .predecessor_account_id(accounts(0))
+            .predecessor_account_id(accounts(1))
             .attached_deposit(STORAGE_FOR_CREATE_SERIES)
             .build()
         );
@@ -1270,7 +1236,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U128::from(1), &royalty, None, None);
+        create_series(&mut contract, &royalty, None, None);
 
         testing_env!(context
             .predecessor_account_id(accounts(1))
@@ -1299,7 +1265,7 @@ mod tests {
     fn test_nft_transfer_payout() {
         let (mut context, mut contract) = setup_contract();
         testing_env!(context
-            .predecessor_account_id(accounts(0))
+            .predecessor_account_id(accounts(1))
             .attached_deposit(STORAGE_FOR_CREATE_SERIES)
             .build()
         );
@@ -1307,7 +1273,7 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, U128::from(1), &royalty, None, None);
+        create_series(&mut contract, &royalty, None, None);
 
         testing_env!(context
             .predecessor_account_id(accounts(1))
