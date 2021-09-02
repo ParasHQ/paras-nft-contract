@@ -397,7 +397,17 @@ impl Contract {
         token_series.metadata.copies = Some(copies - decrease_copies.0);
 
         self.token_series_by_id.insert(&token_series_id, &token_series);
-
+        env::log(
+            json!({
+                "type": "nft_decrease_series_copies",
+                "params": {
+                    "token_series_id": token_series_id,
+                    "copies": U64::from(token_series.metadata.copies.unwrap())
+                }
+            })
+            .to_string()
+            .as_bytes(),
+        );
         U64::from(token_series.metadata.copies.unwrap())
     }
 
