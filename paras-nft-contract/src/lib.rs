@@ -114,6 +114,14 @@ impl Contract {
         }
     }
 
+    pub fn change_metadata(&mut self, metadata: NFTContractMetadata) {
+        assert_eq!(
+            env::predecessor_account_id(),
+            self.tokens.owner_id
+        );
+        self.metadata = LazyOption::new(StorageKey::Metadata, Some(&metadata));
+    }
+
     // Treasury
     #[payable]
     pub fn set_treasury(&mut self, treasury_id: ValidAccountId) {
@@ -1219,5 +1227,31 @@ mod tests {
             token.owner_id,
             accounts(3).to_string()
         )
+    }
+
+    #[test]
+    fn test_change_metadata() {
+        let (mut context, mut contract) = setup_contract();
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .build()
+        );
+        contract.change_metadata(
+            NFTContractMetadata {
+                spec: NFT_METADATA_SPEC.to_string(),
+                name: "Paras-1".to_string(),
+                symbol: "PARAS-1".to_string(),
+                icon: Some(DATA_IMAGE_SVG_COMIC_ICON.to_string()),
+                base_uri: Some("https://ipfs.fleek.co/ipfs/random".to_string()),
+                reference: None,
+                reference_hash: None,
+            },
+        );
+
+        let metadata_cur = contract.nft_metadata();
+
+        assert_eq!(metadata_cur.name, "Paras-1".to_string());
+        assert_eq!(metadata_cur.symbol, "PARAS-1".to_string());
+        assert_eq!(metadata_cur.base_uri, Some("https://ipfs.fleek.co/ipfs/random".to_string()));
     }
 }
