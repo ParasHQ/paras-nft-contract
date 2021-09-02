@@ -412,7 +412,7 @@ impl Contract {
     }
 
     #[payable]
-    pub fn nft_set_series_price(&mut self, token_series_id: TokenSeriesId, price: U128) -> U128 {
+    pub fn nft_set_series_price(&mut self, token_series_id: TokenSeriesId, price: Option<U128>) -> Option<U128> {
         assert_one_yocto();
 
         let mut token_series = self.token_series_by_id.get(&token_series_id).expect("Token series not exist");
@@ -422,7 +422,12 @@ impl Contract {
             "Paras: Creator only"
         );
 
-        token_series.price = Some(price.into());
+        if price.is_none() {
+            token_series.price = None;
+        } else {
+            token_series.price = Some(price.unwrap().0);
+        }
+
         self.token_series_by_id.insert(&token_series_id, &token_series);
         env::log(
             json!({
@@ -435,7 +440,7 @@ impl Contract {
             .to_string()
             .as_bytes(),
         );
-        return token_series.price.unwrap().into();
+        return price;
     }
 
     #[payable]
@@ -1174,7 +1179,15 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
 
-        create_series(&mut contract, &royalty, None, None);
+        create_series(&mut contract, &royalty, Some(U128::from(1 * 10u128.pow(24))), None);
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(1)
+            .build()
+        );
+
+        contract.nft_set_series_price("1".to_string(), None);
 
         testing_env!(context
             .predecessor_account_id(accounts(2))
