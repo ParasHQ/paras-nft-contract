@@ -207,7 +207,7 @@ impl Contract {
         refund_deposit(env::storage_usage() - initial_storage_usage, 0);
 
 		TokenSeriesJson{
-            token_series_id: token_series_id,
+            token_series_id,
 			metadata: token_metadata,
 			creator_id: creator_id.into(),
             royalty: royalty_res,
@@ -230,7 +230,7 @@ impl Contract {
             "Paras: attached deposit is less than price : {}",
             price
         );
-        let token_id: TokenId = self._nft_mint_series(token_series_id, receiver_id);
+        let token_id: TokenId = self._nft_mint_series(token_series_id, receiver_id.clone());
 
         let for_treasury = price as u128 * TREASURY_FEE / 10_000u128;
         let price_deducted = price - for_treasury;
@@ -238,6 +238,21 @@ impl Contract {
         Promise::new(self.treasury_id.clone()).transfer(for_treasury);
 
         refund_deposit(env::storage_usage() - initial_storage_usage, price);
+
+        env::log(
+            json!({
+                "type": "nft_transfer",
+                "params": {
+                    "token_id": token_id,
+                    "sender_id": "",
+                    "receiver_id": receiver_id,
+                    "price": price.to_string(),
+                }
+            })
+            .to_string()
+            .as_bytes(),
+        );
+
         token_id
     }
 
@@ -251,9 +266,23 @@ impl Contract {
 
         let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
         assert_eq!(env::predecessor_account_id(), token_series.creator_id, "Paras: not creator");
-        let token_id: TokenId = self._nft_mint_series(token_series_id, receiver_id);
+        let token_id: TokenId = self._nft_mint_series(token_series_id, receiver_id.clone());
 
         refund_deposit(env::storage_usage() - initial_storage_usage, 0);
+        
+        env::log(
+            json!({
+                "type": "nft_transfer",
+                "params": {
+                    "token_id": token_id,
+                    "sender_id": "",
+                    "receiver_id": receiver_id,
+                }
+            })
+            .to_string()
+            .as_bytes(),
+        );
+
         token_id
     }
 
@@ -318,18 +347,6 @@ impl Contract {
             tokens_per_owner.insert(&owner_id, &token_ids);
         }
 
-        env::log(
-            json!({
-                "type": "nft_transfer",
-                "params": {
-                    "token_id": token_id,
-                    "sender_id": "",
-                    "receiver_id": owner_id,
-                }
-            })
-            .to_string()
-            .as_bytes(),
-        );
 
         token_id
     }
@@ -492,7 +509,7 @@ impl Contract {
 	pub fn nft_get_series_single(&self, token_series_id: TokenSeriesId) -> TokenSeriesJson {
 		let token_series = self.token_series_by_id.get(&token_series_id).expect("Series does not exist");
 		TokenSeriesJson{
-            token_series_id: token_series_id,
+            token_series_id,
 			metadata: token_series.metadata,
 			creator_id: token_series.creator_id,
             royalty: token_series.royalty,
@@ -525,7 +542,7 @@ impl Contract {
             .skip(start_index as usize)
             .take(limit)
             .map(|(token_series_id, token_series)| TokenSeriesJson{
-                token_series_id: token_series_id,
+                token_series_id,
                 metadata: token_series.metadata,
                 creator_id: token_series.creator_id,
                 royalty: token_series.royalty,
