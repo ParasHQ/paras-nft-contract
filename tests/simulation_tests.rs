@@ -4,7 +4,6 @@ use near_sdk_sim::{
 };
 use near_sdk::serde_json::json;
 
-
 pub const NFT_CONTRACT_ID: &str = "nft";
 
 near_sdk_sim::lazy_static_include::lazy_static_include_bytes! {
@@ -68,7 +67,8 @@ fn simulate_create_new_series() {
         to_yocto("2")
     );
 
-    let storage_price_for_adding_series = (nft.account().unwrap().storage_usage - initial_storage_usage) as u128 * 10u128.pow(19);
+    let storage_price_for_adding_series =
+        (nft.account().unwrap().storage_usage - initial_storage_usage) as u128 * 10u128.pow(19);
     println!("[CREATE SERIES] Storage price: {} yoctoNEAR", storage_price_for_adding_series);
     println!("[CREATE SERIES] Gas burnt price: {} TeraGas", outcome.gas_burnt() as f64 / 1e12);
 }
@@ -109,7 +109,8 @@ fn simulate_mint() {
         to_yocto("2")
     );
 
-    let storage_price_for_mint = (nft.account().unwrap().storage_usage - initial_storage_usage) as u128 * 10u128.pow(19);
+    let storage_price_for_mint =
+        (nft.account().unwrap().storage_usage - initial_storage_usage) as u128 * 10u128.pow(19);
     println!("[MINT] Storage price: {} yoctoNEAR", storage_price_for_mint);
     println!("[MINT] Gas burnt price: {} TeraGas", outcome.gas_burnt() as f64 / 1e12);
 
@@ -126,7 +127,8 @@ fn simulate_mint() {
         to_yocto("2")
     );
 
-    let storage_price_for_mint = (nft.account().unwrap().storage_usage - initial_storage_usage) as u128 * 10u128.pow(19);
+    let storage_price_for_mint: u128 =
+        (nft.account().unwrap().storage_usage - initial_storage_usage) as u128 * 10u128.pow(19);
     println!("[MINT 2nd] Storage price: {} yoctoNEAR", storage_price_for_mint);
     println!("[MINT 2nd] Gas burnt price: {} TeraGas", outcome.gas_burnt() as f64 / 1e12);
 
@@ -143,7 +145,8 @@ fn simulate_mint() {
         to_yocto("2")
     );
 
-    let storage_price_for_mint = (nft.account().unwrap().storage_usage - initial_storage_usage) as u128 * 10u128.pow(19);
+    let storage_price_for_mint =
+        (nft.account().unwrap().storage_usage - initial_storage_usage) as u128 * 10u128.pow(19);
     println!("[MINT 3nd] Storage price: {} yoctoNEAR", storage_price_for_mint);
     println!("[MINT 3nd] Gas burnt price: {} TeraGas", outcome.gas_burnt() as f64 / 1e12);
     
@@ -198,7 +201,8 @@ fn simulate_approve() {
         to_yocto("2")
     );
 
-    let storage_price_for_approve = (nft.account().unwrap().storage_usage - initial_storage_usage) as u128 * 10u128.pow(19);
+    let storage_price_for_approve =
+        (nft.account().unwrap().storage_usage - initial_storage_usage) as u128 * 10u128.pow(19);
     println!("[APPROVE] Storage price: {} yoctoNEAR", storage_price_for_approve);
     println!("[APPROVE] Gas burnt price: {} TeraGas", outcome.gas_burnt() as f64 / 1e12);
 }

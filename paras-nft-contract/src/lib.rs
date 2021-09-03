@@ -207,7 +207,7 @@ impl Contract {
         refund_deposit(env::storage_usage() - initial_storage_usage, 0);
 
 		TokenSeriesJson{
-            token_series_id: token_series_id,
+            token_series_id,
 			metadata: token_metadata,
 			creator_id: creator_id.into(),
             royalty: royalty_res,
@@ -492,7 +492,7 @@ impl Contract {
 	pub fn nft_get_series_single(&self, token_series_id: TokenSeriesId) -> TokenSeriesJson {
 		let token_series = self.token_series_by_id.get(&token_series_id).expect("Series does not exist");
 		TokenSeriesJson{
-            token_series_id: token_series_id,
+            token_series_id,
 			metadata: token_series.metadata,
 			creator_id: token_series.creator_id,
             royalty: token_series.royalty,
@@ -525,7 +525,7 @@ impl Contract {
             .skip(start_index as usize)
             .take(limit)
             .map(|(token_series_id, token_series)| TokenSeriesJson{
-                token_series_id: token_series_id,
+                token_series_id,
                 metadata: token_series.metadata,
                 creator_id: token_series.creator_id,
                 royalty: token_series.royalty,
