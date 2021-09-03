@@ -114,6 +114,21 @@ impl Contract {
         }
     }
 
+    pub fn change_metadata_to_paras(&mut self) -> NFTContractMetadata {
+        assert_eq!(
+            env::predecessor_account_id(),
+            self.tokens.owner_id,
+            "Paras: owner only"
+        );
+        let mut metadata = self.metadata.get().unwrap();
+        metadata.name = "Paras Collectibles".to_string();
+        metadata.symbol = "PARAS".to_string();
+        metadata.icon = Some("%3Csvg width='1080' height='1080' viewBox='0 0 1080 1080' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='1080' height='1080' rx='10' fill='%230000BA'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M335.238 896.881L240 184L642.381 255.288C659.486 259.781 675.323 263.392 689.906 266.718C744.744 279.224 781.843 287.684 801.905 323.725C827.302 369.032 840 424.795 840 491.014C840 557.55 827.302 613.471 801.905 658.779C776.508 704.087 723.333 726.74 642.381 726.74H468.095L501.429 896.881H335.238ZM387.619 331.329L604.777 369.407C614.008 371.807 622.555 373.736 630.426 375.513C660.02 382.193 680.042 386.712 690.869 405.963C704.575 430.164 711.428 459.95 711.428 495.321C711.428 530.861 704.575 560.731 690.869 584.932C677.163 609.133 648.466 621.234 604.777 621.234H505.578L445.798 616.481L387.619 331.329Z' fill='white'/%3E%3C/svg%3E".to_string());
+        self.metadata.replace(&metadata);
+
+        self.metadata.get().unwrap()
+    }
+
     // Treasury
     #[payable]
     pub fn set_treasury(&mut self, treasury_id: ValidAccountId) {
@@ -1327,5 +1342,20 @@ mod tests {
             token.owner_id,
             accounts(3).to_string()
         )
+    }
+
+    #[test]
+    fn test_change_metadata() {
+        let (mut context, mut contract) = setup_contract();
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .build()
+        );
+
+        contract.change_metadata_to_paras();
+        let metadata = contract.nft_metadata();
+
+        assert_eq!(metadata.name, "Paras Collectibles");
+
     }
 }
