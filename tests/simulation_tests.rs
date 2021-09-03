@@ -156,6 +156,7 @@ fn simulate_mint() {
 fn simulate_approve() {
     let (root, nft, _) = init();
 
+    let trst = root.create_user("trst".repeat(16), to_yocto("100"));
     root.call(
         nft.account_id(),
         "nft_create_series",
@@ -179,7 +180,7 @@ fn simulate_approve() {
         nft.account_id(),
         "nft_buy",
         &json!({
-            "token_series_id": u128::MAX.to_string(),
+            "token_series_id": "1",
             "receiver_id": root.account_id(),
         }).to_string().into_bytes(),
         DEFAULT_GAS,
@@ -194,7 +195,7 @@ fn simulate_approve() {
         "nft_approve",
         &json!({
             "token_id": format!("1:1"),
-            "account_id": "test".repeat(16),
+            "account_id": trst.account_id(),
             "msg": "{\"price\":\"3000000000000000000000000\",\"ft_token_id\":\"near\"}",
         }).to_string().into_bytes(),
         DEFAULT_GAS,
