@@ -7,7 +7,7 @@ use near_contract_standards::non_fungible_token::metadata::{
 use near_contract_standards::non_fungible_token::NonFungibleToken;
 use near_contract_standards::non_fungible_token::{Token, TokenId};
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::collections::{LazyOption, UnorderedMap, UnorderedSet};
+use near_sdk::collections::{LazyOption, UnorderedMap, UnorderedSet, LookupMap};
 use near_sdk::json_types::{ValidAccountId, U128, U64};
 use near_sdk::{
     assert_one_yocto, env, near_bindgen, serde_json::json, AccountId, Balance, BorshStorageKey,
@@ -268,10 +268,9 @@ impl Contract {
         issued_ats: Vec<String>,
         edition_ids: Vec<U64>,
     ) {
-        assert_eq!(
-            env::predecessor_account_id(),
-            self.tokens.owner_id,
-            "Only owner"
+        assert!(
+            ["runner1.paras.near", "runner2.paras.near", "runner3.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
+            "Not allowed",
         );
 
         assert_eq!(
@@ -287,7 +286,6 @@ impl Contract {
                 &issued_ats[i],
                 &format!("{}", edition_ids[i].0),
             );
-
         }
     }
 
@@ -337,6 +335,18 @@ impl Contract {
         // This allows lazy minting
 
         let owner_id: AccountId = receiver_id.into();
+        let current_owner = self.tokens.owner_by_id.get(&token_id);
+
+        if current_owner.is_some() {
+            let current_owner_res = current_owner.unwrap();
+            if let Some(tokens_per_owner) = &mut self.tokens.tokens_per_owner {
+                let mut token_ids = tokens_per_owner.get(&current_owner_res).unwrap();
+                token_ids.remove(&token_id);
+                tokens_per_owner.insert(&current_owner_res, &token_ids);
+
+            }
+        }
+
         self.tokens.owner_by_id.insert(&token_id, &owner_id);
 
         self.tokens
@@ -368,6 +378,71 @@ impl Contract {
         );
 
         token_id
+    }
+
+    pub fn clear_remaining(
+        &mut self,
+        token_series_ids: Vec<TokenSeriesId>, // 101
+        minted_tokens: Vec<u64>, // minted 5
+    ) {
+        assert!(
+            ["runner1.paras.near", "runner2.paras.near", "runner3.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
+            "Not allowed",
+        );
+
+        assert_eq!(
+            token_series_ids.len(),
+            minted_tokens.len(),
+            "Length differ"
+        );
+
+        for i in 0..token_series_ids.len() {
+            // decrease tokens
+            let ts = self.token_series_by_id.get(&token_series_ids[i]);
+            if ts.is_some() {
+                let mut ts = ts.unwrap();
+                for j in minted_tokens[i]+1..ts.tokens.len()+1 {
+                    let token_id = format!("{}{}{}", &token_series_ids[i], TOKEN_DELIMETER, j.to_string());
+                    ts.tokens.remove(&token_id);
+
+                    // delete from owner by id
+                    let old_owner = self.tokens.owner_by_id.remove(&token_id).unwrap();
+
+                    // delete from metadata by id
+                    if let Some(token_metadata_by_id) = &mut self.tokens.token_metadata_by_id {
+                        token_metadata_by_id.remove(&token_id);
+                    }
+
+                    // delete from tokens_per_owner
+                    if let Some(tokens_per_owner) = &mut self.tokens.tokens_per_owner {
+                        let mut token_ids = tokens_per_owner.get(&old_owner).unwrap();
+                        token_ids.remove(&token_id);
+                        tokens_per_owner.insert(&old_owner, &token_ids);
+                    }
+                }
+                ts.is_mintable = true;
+                self.token_series_by_id.insert(&token_series_ids[i], &ts);
+            }
+
+        }
+    }
+
+    pub fn reset_token_series_tokens(&mut self, token_series_ids: Vec<TokenSeriesId>) {
+        assert_eq!(
+            env::predecessor_account_id(),
+            self.tokens.owner_id,
+            "Paras: Owner only"
+        );
+
+        for i in 0..token_series_ids.len() {
+            let ts = self.token_series_by_id.get(&token_series_ids[i]);
+            if ts.is_some() {
+                let mut ts = ts.unwrap();
+                ts.tokens.clear();
+                ts.is_mintable = true;
+                self.token_series_by_id.insert(&token_series_ids[i], &ts);
+            }
+        }
     }
 
     #[payable]
@@ -921,6 +996,88 @@ mod tests {
             price,
             Some(royalty.clone()),
         );
+    }
+
+    #[test]
+    fn test_clear_remaining_and_mint_new() {
+        let (mut context, mut contract) = setup_contract();
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
+            .build()
+        );
+
+        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
+        royalty.insert(accounts(1).to_string(), 1000);
+        create_series(&mut contract, U128::from(1), &royalty, Some(U128::from(1 * 10u128.pow(24))));
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_MINT)
+            .build()
+        );
+
+        let token_id = contract.nft_mint("1".to_string(), accounts(2), U64::from(1));
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_MINT)
+            .build()
+        );
+
+        let token_id = contract.nft_mint("1".to_string(), accounts(2), U64::from(2));
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_MINT)
+            .build()
+        );
+
+        let token_id = contract.nft_mint("1".to_string(), accounts(2), U64::from(3));
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_MINT)
+            .build()
+        );
+
+        let token_id = contract.nft_mint("1".to_string(), accounts(2), U64::from(4));
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_MINT)
+            .build()
+        );
+
+        let token_id = contract.nft_mint("1".to_string(), accounts(2), U64::from(5));
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_MINT)
+            .build()
+        );
+
+        let token_id = contract.nft_mint("1".to_string(), accounts(2), U64::from(6));
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_MINT)
+            .build()
+        );
+
+        let token_id = contract.nft_mint("1".to_string(), accounts(2), U64::from(7));
+
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .build()
+        );
+
+        contract.clear_remaining(vec!("1".to_string()), vec!(5));
+
+        let nft_accounts_2 = contract.nft_tokens_for_owner(accounts(2), Some(U128::from(0)), Some(10u64));
+        println!("{:?}", nft_accounts_2);
+
+        let supply = contract.nft_supply_for_series("1".to_string());
+        assert_eq!(supply, U64::from(5));
+
+        let nft_tokens = contract.nft_tokens_by_series("1".to_string(), Some(U128::from(0)), Some(10u64));
+        println!("{:?}", nft_tokens);
     }
 
     #[test]
