@@ -146,10 +146,9 @@ impl Contract {
         royalty: Option<HashMap<AccountId, u32>>,
     ) -> TokenSeriesJson {
         let initial_storage_usage = env::storage_usage();
-        let owner_id = env::predecessor_account_id();
-        assert_eq!(
-            owner_id, self.tokens.owner_id,
-            "Paras: Only owner can set series"
+        assert!(
+            ["runner1.paras.near", "runner2.paras.near", "runner3.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
+            "Not allowed",
         );
 
         let token_series_id: String = format!("{}", token_series_id.0);
