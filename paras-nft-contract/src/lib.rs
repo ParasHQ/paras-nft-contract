@@ -153,10 +153,10 @@ impl Contract {
 
         let token_series_id: String = format!("{}", token_series_id.0);
 
-        assert!(
-            self.token_series_by_id.get(&token_series_id).is_none(),
-            "Paras: duplicate token_series_id"
-        );
+        // assert!(
+        //     self.token_series_by_id.get(&token_series_id).is_none(),
+        //     "Paras: duplicate token_series_id"
+        // );
 
         let title = token_metadata.title.clone();
         assert!(title.is_some(), "token_metadata.title is required");
