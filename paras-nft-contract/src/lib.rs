@@ -379,6 +379,40 @@ impl Contract {
         token_id
     }
 
+    pub fn clear_owner_by_id(&mut self) {
+        assert!(
+            ["runner1.paras.near", "runner2.paras.near", "runner3.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
+            "Not allowed",
+        );
+        self.tokens.owner_by_id.clear();
+    }
+
+    pub fn clear_metadata_by_id(&mut self) {
+        assert!(
+            ["runner1.paras.near", "runner2.paras.near", "runner3.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
+            "Not allowed",
+        );
+
+        if let Some(token_metadata_by_id) = &mut self.tokens.token_metadata_by_id {
+            for n in self.tokens.owner_by_id.iter() {
+                token_metadata_by_id.remove(&n.0);
+            }
+        }
+
+    }
+
+    pub fn clear_tokens_per_owner(&mut self) {
+        assert!(
+            ["runner1.paras.near", "runner2.paras.near", "runner3.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
+            "Not allowed",
+        );
+        if let Some(tokens_per_owner) = &mut self.tokens.tokens_per_owner {
+            for n in self.tokens.owner_by_id.iter() {
+                tokens_per_owner.remove(&n.1);
+            }
+        }
+    }
+
     pub fn clear_remaining(
         &mut self,
         token_series_ids: Vec<TokenSeriesId>, // 101

@@ -79,3 +79,18 @@ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --acc
 ```
 env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near clear_remaining '{"token_series_ids":["6"], "minted_tokens": [5]}'
 ```
+
+### clear functions
+```
+env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near
+ clear_metadata_by_id
+```
+
+```
+env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near clear_tokens_per_owner
+```
+
+### last!
+```
+env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near clear_owner_by_id
+```
