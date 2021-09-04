@@ -413,6 +413,10 @@ impl Contract {
         }
     }
 
+    pub fn total_nft(&self) -> u64 {
+        self.tokens.owner_by_id.len()
+    }
+
     pub fn clear_remaining(
         &mut self,
         token_series_ids: Vec<TokenSeriesId>, // 101
