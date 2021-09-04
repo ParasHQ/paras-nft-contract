@@ -401,14 +401,17 @@ impl Contract {
 
     }
 
-    pub fn clear_tokens_per_owner(&mut self) {
+    pub fn clear_tokens_per_owner(&mut self, start: u64, end: u64) {
         assert!(
             ["runner1.paras.near", "runner2.paras.near", "runner3.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
             "Not allowed",
         );
         if let Some(tokens_per_owner) = &mut self.tokens.tokens_per_owner {
-            for n in self.tokens.owner_by_id.iter() {
-                tokens_per_owner.remove(&n.1);
+            let len: u64 = self.tokens.owner_by_id.len();
+            assert!(end <= len);
+
+            for i in start..end {
+                tokens_per_owner.remove(&self.tokens.owner_by_id.to_vec().get(0).unwrap().1);
             }
         }
     }

@@ -87,7 +87,7 @@ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --acc
 ```
 
 ```
-env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near clear_tokens_per_owner
+env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near clear_tokens_per_owner '{"start":0, "end": 10}'
 ```
 
 ### last!
