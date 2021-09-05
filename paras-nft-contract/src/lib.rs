@@ -581,7 +581,7 @@ impl Contract {
         } else {
             tokens.len()
         };
-        for i in from_index+1..end {
+        for i in from_index+1..end+1 {
             let token_id = format!("{}{}{}", &token_series_id, TOKEN_DELIMETER, &i);
             selected_tokens.push(self.nft_token(token_id));
         }
