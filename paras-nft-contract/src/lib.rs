@@ -565,7 +565,7 @@ impl Contract {
         token_series_id: TokenSeriesId,
         from_index: Option<u64>,
         limit: Option<u64>,
-    ) -> Vec<Token> {
+    ) -> Vec<Option<Token>> {
         let start_index: u128 = from_index.map(From::from).unwrap_or_default();
         let tokens = self.token_series_by_id.get(&token_series_id).unwrap().tokens;
         assert!(
@@ -573,7 +573,7 @@ impl Contract {
             "Out of bounds, please use a smaller from_index."
         );
 
-        let mut selected_tokens: Vec<Token> = Vec::new();
+        let mut selected_tokens: Vec<Option<Token>> = Vec::new();
         let from_index = from_index.unwrap();
         let limit = limit.unwrap();
         let end = if (from_index + limit < tokens.len()) {
@@ -583,8 +583,7 @@ impl Contract {
         };
         for i in from_index+1..end {
             let token_id = format!("{}{}{}", &token_series_id, TOKEN_DELIMETER, &i);
-            env::log(format!("{}", token_id).to_string().as_bytes());
-            selected_tokens.push(self.nft_token(token_id).unwrap());
+            selected_tokens.push(self.nft_token(token_id));
         }
         selected_tokens
     }
