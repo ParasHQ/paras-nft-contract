@@ -153,10 +153,10 @@ impl Contract {
 
         let token_series_id: String = format!("{}", token_series_id.0);
 
-        assert!(
-            self.token_series_by_id.get(&token_series_id).is_none(),
-            "Paras: duplicate token_series_id"
-        );
+        // assert!(
+        //     self.token_series_by_id.get(&token_series_id).is_none(),
+        //     "Paras: duplicate token_series_id"
+        // );
 
         let title = token_metadata.title.clone();
         assert!(title.is_some(), "token_metadata.title is required");
@@ -181,16 +181,25 @@ impl Contract {
             None
         };
 
-        self.token_series_by_id.insert(&token_series_id, &TokenSeries{
-            metadata: token_metadata.clone(),
-            creator_id: creator_id.to_string(),
-            tokens: UnorderedSet::new(
+        let token_series_cur = self.token_series_by_id.get(&token_series_id);
+
+        let tokens = if token_series_cur.is_some() {
+           token_series_cur.unwrap().tokens
+        } else {
+            UnorderedSet::new(
                 StorageKey::TokensBySeriesInner {
                     token_series: token_series_id.clone(),
                 }
-                .try_to_vec()
-                .unwrap(),
-            ),
+                    .try_to_vec()
+                    .unwrap(),
+            )
+        };
+
+
+        self.token_series_by_id.insert(&token_series_id, &TokenSeries{
+            metadata: token_metadata.clone(),
+            creator_id: creator_id.to_string(),
+            tokens: tokens,
             price: price_res,
             is_mintable: true,
             royalty: royalty_res.clone(),
