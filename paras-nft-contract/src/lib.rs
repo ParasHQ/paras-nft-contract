@@ -560,6 +560,35 @@ impl Contract {
             .collect()
     }
 
+    pub fn nft_tokens_by_series_v2(
+        &self,
+        token_series_id: TokenSeriesId,
+        from_index: Option<u64>,
+        limit: Option<u64>,
+    ) -> Vec<Token> {
+        let start_index: u128 = from_index.map(From::from).unwrap_or_default();
+        let tokens = self.token_series_by_id.get(&token_series_id).unwrap().tokens;
+        assert!(
+            (tokens.len() as u128) > start_index,
+            "Out of bounds, please use a smaller from_index."
+        );
+
+        let mut selected_tokens: Vec<Token> = Vec::new();
+        let from_index = from_index.unwrap();
+        let limit = limit.unwrap();
+        let end = if (from_index + limit < tokens.len()) {
+            from_index + limit
+        } else {
+            tokens.len()
+        };
+        for i in from_index+1..end {
+            let token_id = format!("{}{}{}", &token_series_id, TOKEN_DELIMETER, &i);
+            env::log(format!("{}", token_id).to_string().as_bytes());
+            selected_tokens.push(self.nft_token(token_id).unwrap());
+        }
+        selected_tokens
+    }
+
     pub fn nft_token(&self, token_id: TokenId) -> Option<Token> {
         let owner_id = self.tokens.owner_by_id.get(&token_id)?;
         let approved_account_ids = self
