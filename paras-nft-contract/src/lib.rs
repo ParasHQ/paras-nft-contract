@@ -571,7 +571,7 @@ impl Contract {
         let from_index = from_index.unwrap();
         let limit = limit.unwrap();
 
-        for i in from_index..limit {
+        for i in from_index..from_index+limit {
             let token_id = format!("{}{}{}", &token_series_id, TOKEN_DELIMETER, &i);
             selected_tokens.push(self.nft_token(token_id));
         }
