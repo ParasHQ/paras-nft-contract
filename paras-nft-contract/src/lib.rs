@@ -147,7 +147,7 @@ impl Contract {
     ) -> TokenSeriesJson {
         let initial_storage_usage = env::storage_usage();
         assert!(
-            ["runner1.paras.near", "runner2.paras.near", "runner3.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
+            ["runner0.paras.near","runner1.paras.near", "runner2.paras.near", "runner3.paras.near", "runner4.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
             "Not allowed",
         );
 
@@ -238,7 +238,7 @@ impl Contract {
     ) -> TokenId {
         let initial_storage_usage = env::storage_usage();
         assert!(
-            ["runner1.paras.near", "runner2.paras.near", "runner3.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
+            ["runner0.paras.near","runner1.paras.near", "runner2.paras.near", "runner3.paras.near", "runner4.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
             "Not allowed",
         );
 
@@ -266,7 +266,7 @@ impl Contract {
         let initial_storage_usage = env::storage_usage();
 
         assert!(
-            ["runner1.paras.near", "runner2.paras.near", "runner3.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
+            ["runner0.paras.near","runner1.paras.near", "runner2.paras.near", "runner3.paras.near", "runner4.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
             "Not allowed",
         );
 
@@ -286,7 +286,7 @@ impl Contract {
         edition_ids: Vec<U64>,
     ) {
         assert!(
-            ["runner1.paras.near", "runner2.paras.near", "runner3.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
+            ["runner0.paras.near","runner1.paras.near", "runner2.paras.near", "runner3.paras.near", "runner4.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
             "Not allowed",
         );
 
