@@ -220,7 +220,7 @@ impl Contract {
             .as_bytes(),
         );
 
-        refund_deposit(env::storage_usage() - initial_storage_usage, 0);
+        // refund_deposit(env::storage_usage() - initial_storage_usage, 0);
 
 		TokenSeriesJson{
             token_series_id: token_series_id,
