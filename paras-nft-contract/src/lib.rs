@@ -760,28 +760,28 @@ impl Contract {
         &mut self, 
         receiver_id: ValidAccountId,
         token_id: TokenId,
-        approval_id: U64,
-        balance: U128, 
-        max_len_payout: u32
-    ) -> Payout {
+        approval_id: Option<u64>,
+        balance: Option<U128>,
+        max_len_payout: Option<u32>
+    ) -> Option<Payout> {
         assert_one_yocto();
 
         // Transfer
         let previous_token = self.nft_token(token_id.clone()).expect("no token");
-        self.tokens.nft_transfer(receiver_id.clone(), token_id.clone(), Some(approval_id.into()), None);
+        self.tokens.nft_transfer(receiver_id.clone(), token_id.clone(), approval_id, None);
 
         // Payout calculation
         let owner_id = previous_token.owner_id;
         let mut total_perpetual = 0;
-        let payout = {
-            let balance_u128: u128 = balance.into();
+        let payout = if let Some(balance) = balance {
+            let balance_u128: u128 = u128::from(balance);
             let mut payout: Payout = HashMap::new();
 
             let mut token_id_iter = token_id.split(TOKEN_DELIMETER);
             let token_series_id = token_id_iter.next().unwrap().parse().unwrap();
             let royalty = self.token_series_by_id.get(&token_series_id).expect("no type").royalty;
 
-            assert!(royalty.len() as u32 <= max_len_payout, "Market cannot payout to that many receivers");
+            assert!(royalty.len() as u32 <= max_len_payout.unwrap(), "Market cannot payout to that many receivers");
             for (k, v) in royalty.iter() {
                 let key = k.clone();
                 if key != owner_id {
@@ -796,8 +796,10 @@ impl Contract {
             );
 
             payout.insert(owner_id.clone(), royalty_to_payout(10000 - total_perpetual, balance_u128));
-            payout
-        }; 
+            Some(payout)
+        } else {
+            None
+        };
         env::log(
             json!({
                 "type": "nft_transfer",
@@ -1322,9 +1324,9 @@ mod tests {
         let payout = contract.nft_transfer_payout(
             accounts(3), 
             token_id.clone(), 
-            U64::from(0), 
-            U128::from(1 * 10u128.pow(24)),
-            10
+            Some(0) ,
+            Some(U128::from(1 * 10u128.pow(24))),
+            Some(10)
         );
 
         let mut payout_calc: HashMap<AccountId, U128> = HashMap::new();
@@ -1337,7 +1339,7 @@ mod tests {
             U128::from((9000 * (1 * 10u128.pow(24))) / 10_000)
         );
 
-        assert_eq!(payout, payout_calc);
+        assert_eq!(payout.unwrap(), payout_calc);
 
         let token = contract.nft_token(token_id).unwrap();
         assert_eq!(
