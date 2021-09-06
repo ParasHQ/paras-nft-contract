@@ -411,6 +411,13 @@ impl Contract {
             "Paras: cannot decrease supply, already minted : {}", minted_copies
         );
 
+        let is_non_mintable = if (copies - decrease_copies.0) == minted_copies {
+            token_series.is_mintable = false;
+            true
+        } else {
+            false
+        };
+
         token_series.metadata.copies = Some(copies - decrease_copies.0);
 
         self.token_series_by_id.insert(&token_series_id, &token_series);
@@ -419,7 +426,8 @@ impl Contract {
                 "type": "nft_decrease_series_copies",
                 "params": {
                     "token_series_id": token_series_id,
-                    "copies": U64::from(token_series.metadata.copies.unwrap())
+                    "copies": U64::from(token_series.metadata.copies.unwrap()),
+                    "is_non_mintable": is_non_mintable,
                 }
             })
             .to_string()
