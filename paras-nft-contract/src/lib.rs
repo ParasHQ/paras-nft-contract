@@ -596,20 +596,36 @@ impl Contract {
         // CUSTOM (switch metadata for the token_series metadata)
         let mut token_id_iter = token_id.split(TOKEN_DELIMETER);
         let token_series_id = token_id_iter.next().unwrap().parse().unwrap();
-                let series_metadata = self.token_series_by_id.get(&token_series_id).unwrap().metadata;
+        let token_series = self.token_series_by_id.get(&token_series_id).unwrap();
 
         let mut token_metadata = self.tokens.token_metadata_by_id.as_ref().unwrap().get(&token_id).unwrap();
 
-        token_metadata.title = Some(format!(
-            "{}{}{}",
-            series_metadata.title.unwrap(),
-            TITLE_DELIMETER,
-            token_id_iter.next().unwrap()
-        ));
+        token_metadata.title = match token_series.metadata.copies {
+            Some(copies) => {
+                if copies > 1 {
+                    Some(format!(
+                        "{}{}{}",
+                        token_series.metadata.title.unwrap(),
+                        TITLE_DELIMETER,
+                        token_id_iter.next().unwrap()
+                    ))
+                } else {
+                    Some(token_series.metadata.title.unwrap())
+                }
+            },
+            None => {
+                Some(format!(
+                    "{}{}{}",
+                    token_series.metadata.title.unwrap(),
+                    TITLE_DELIMETER,
+                    token_id_iter.next().unwrap()
+                ))
+            }
+        };
 
-        token_metadata.reference = series_metadata.reference;
-        token_metadata.media = series_metadata.media;
-        token_metadata.copies = series_metadata.copies;
+        token_metadata.reference = token_series.metadata.reference;
+        token_metadata.media = token_series.metadata.media;
+        token_metadata.copies = token_series.metadata.copies;
 
         Some(Token {
             token_id,
