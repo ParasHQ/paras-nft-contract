@@ -512,6 +512,16 @@ impl Contract {
         );
     }
 
+    #[payable]
+    pub fn migrate_change_metadata(&mut self, token_series_id: TokenSeriesId, token_metadata: TokenMetadata) {
+        assert_eq!(env::predecessor_account_id(), self.tokens.owner_id, "Paras: only owner");
+        let mut token_series_data = self.token_series_by_id.get(&token_series_id).unwrap();
+        token_series_data.metadata.title = token_metadata.title;
+        token_series_data.metadata.description = token_metadata.description;
+        token_series_data.metadata.media = token_metadata.media;
+        token_series_data.metadata.reference = token_metadata.reference;
+        self.token_series_by_id.insert(&token_series_id, &token_series_data);
+    }
     // CUSTOM VIEWS
 
 	pub fn nft_get_series_single(&self, token_series_id: TokenSeriesId) -> TokenSeriesJson {
@@ -1354,5 +1364,49 @@ mod tests {
             token.owner_id,
             accounts(3).to_string()
         )
+    }
+
+    #[test]
+    fn test_migrate_change_metadata() {
+        let (mut context, mut contract) = setup_contract();
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
+            .build()
+        );
+
+        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
+        royalty.insert(accounts(1).to_string(), 1000);
+
+        create_series(&mut contract, &royalty, None, Some(16));
+
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .build()
+        );
+
+        contract.migrate_change_metadata("1".to_string(), TokenMetadata {
+            title: Some("Yandere land".to_string()),
+            description: None,
+            media: Some(
+                "Hehe".to_string()
+            ),
+            media_hash: None,
+            copies: None,
+            issued_at: None,
+            expires_at: None,
+            starts_at: None,
+            updated_at: None,
+            extra: None,
+            reference: Some(
+                "Hehe2".to_string()
+            ),
+            reference_hash: None,
+        });
+
+        let token_series_res = contract.nft_get_series_single("1".to_string());
+
+        assert_eq!(token_series_res.metadata.title.unwrap(), "Yandere land".to_string());
+        assert_eq!(token_series_res.metadata.copies.unwrap(), 16);
     }
 }
