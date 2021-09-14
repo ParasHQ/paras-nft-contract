@@ -79,3 +79,13 @@ env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --acc
 ```
 env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId alice.test.near comic.test.near nft_approve '{"token_id":"1:10","account_id":"marketplace.test.near","msg":"{\"price\":\"3000000000000000000000000\",\"ft_token_id\":\"near\"}"}' --depositYocto 1320000000000000000000
 ```
+
+### Migrate create series
+```
+env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near migrate_create_series '{"creator_id":"charlie.test.near","token_metadata":{"title":"Naruto Shippuden ch.2: Bukan Menolong sasuke","media":"bafybeidzcan4nzcz7sczs4yzyxly4galgygnbjewipj6haco4kffoqpkiy", "reference":"bafybeicg4ss7qh5odijfn2eogizuxkrdh3zlv4eftcmgnljwu7dm64uwji", "copies": 10},"royalty":{"alice.test.near": 1000}}' --depositYocto 8540000000000000000000
+```
+
+### Migrate mint batch
+```
+env NEAR_ENV=local near call --keyPath ~/.near/localnet/validator_key.json --accountId comic.test.near comic.test.near migrate_mint_batch '{"token_series_id":"7","receiver_ids":["comic.test.near", "comic1.test.near", "comic2.test.near", "comic3.test.near", "comic4.test.near", "comic5.test.near", "comic6.test.near", "comic7.test.near", "comic8.test.near", "comic9.test.near"],"issued_ats":["1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","1630133919920","123123"], "edition_ids":["1","2","3","4","5","6","7","8","9","10"]}' --gas 300000000000000
+```
