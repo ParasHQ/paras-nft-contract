@@ -687,7 +687,7 @@ impl Contract {
         token_series_id: TokenSeriesId,
         from_index: Option<U128>,
         limit: Option<u64>,
-    ) -> Vec<Token> {
+    ) -> Vec<Option<Token>> {
         let start_index: u128 = from_index.map(From::from).unwrap_or_default();
         let tokens = self.token_series_by_id.get(&token_series_id).unwrap().tokens;
         assert!(
@@ -701,7 +701,7 @@ impl Contract {
             .iter()
             .skip(start_index as usize)
             .take(limit)
-            .map(|token_id| self.nft_token(token_id).unwrap())
+            .map(|token_id| self.nft_token(token_id))
             .collect()
     }
 
