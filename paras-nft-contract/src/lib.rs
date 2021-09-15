@@ -351,7 +351,7 @@ impl Contract {
         token_id
     }
 
-    pub fn migrate_fix_supply(&mut self, token_series_id: TokenSeriesId, start: u32, limit: u32) {
+    pub fn migrate_fix_supply(&mut self, token_series_id: TokenSeriesId, start: u32, limit: u32) -> &str {
         assert!(
             ["runner0.paras.near","runner1.paras.near", "runner2.paras.near", "runner3.paras.near", "runner4.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
             "Not allowed",
@@ -360,24 +360,14 @@ impl Contract {
         let mut token_series = self.token_series_by_id.get(&token_series_id).unwrap();
         for i in start..limit {
             let filler_id = format!("{}{}{}", &token_series_id, TOKEN_DELIMETER, i);
-            token_series.tokens.insert(&filler_id);
             if token_series.tokens.len() >= token_series.metadata.copies.unwrap_or(u64::MAX) {
-                env::log(
-                    json!({
-                        "type": "nft_set_series_non_mintable",
-                        "params": {
-                            "token_series_id": token_series_id,
-                        }
-                    })
-                        .to_string()
-                        .as_bytes(),
-                );
-                token_series.is_mintable = false;
-                break
+                return "Exceed";
             }
+            token_series.tokens.insert(&filler_id);
         }
 
         self.token_series_by_id.insert(&token_series_id, &token_series);
+        return "Done";
     }
 
     #[payable]
