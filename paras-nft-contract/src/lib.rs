@@ -359,7 +359,7 @@ impl Contract {
 
         let mut token_series = self.token_series_by_id.get(&token_series_id).unwrap();
         for i in start..end+1 {
-            if (token.series.tokens > token_series.metadata.copies.unwrap_or(u64::MAX)) {
+            if token_series.tokens.len() > token_series.metadata.copies.unwrap_or(u64::MAX) {
                 return "Exceeded";
             }
             let token_id = format!("{}{}{}", &token_series_id, TOKEN_DELIMETER, i);
