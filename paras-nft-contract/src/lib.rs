@@ -351,20 +351,18 @@ impl Contract {
         token_id
     }
 
-    pub fn migrate_fix_supply(&mut self, token_series_id: TokenSeriesId, start: u32, limit: u32) -> &str {
+    pub fn migrate_fix_supply(&mut self, token_series_id: TokenSeriesId, start: u32, end: u32) -> &str {
         assert!(
             ["runner0.paras.near","runner1.paras.near", "runner2.paras.near", "runner3.paras.near", "runner4.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
             "Not allowed",
         );
 
         let mut token_series = self.token_series_by_id.get(&token_series_id).unwrap();
-        for i in start..limit {
-            let filler_id = format!("{}{}{}", &token_series_id, TOKEN_DELIMETER, i);
-            if token_series.tokens.len() >= token_series.metadata.copies.unwrap_or(u64::MAX) {
-                return "Exceed";
-            }
-            token_series.tokens.insert(&filler_id);
+        for i in start..end+1 {
+            let delete_token_id = format!("{}{}{}", &token_series_id, TOKEN_DELIMETER, i);
+            token_series.tokens.remove(&delete_token_id);
         }
+        token_series.is_mintable = true;
 
         self.token_series_by_id.insert(&token_series_id, &token_series);
         return "Done";
