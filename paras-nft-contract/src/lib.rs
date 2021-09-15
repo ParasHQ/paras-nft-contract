@@ -372,6 +372,7 @@ impl Contract {
                         .to_string()
                         .as_bytes(),
                 );
+                token_series.is_mintable = false;
                 break
             }
         }
