@@ -361,7 +361,6 @@ impl Contract {
             let token_id = format!("{}{}{}", &token_series_id, TOKEN_DELIMETER, i);
             token_series.tokens.remove(&token_id);
         }
-        token_series.tokens.clear();
         self.token_series_by_id.insert(&token_series_id, &token_series);
     }
 
