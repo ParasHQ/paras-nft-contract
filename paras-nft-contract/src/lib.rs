@@ -373,14 +373,15 @@ impl Contract {
                 return "Exceeded";
             }
             let token_id = format!("{}{}{}", &token_series_id, TOKEN_DELIMETER, i);
+            let res: bool = token_series.tokens.insert(&token_id);
             env::log(
                 json!({
-                "token_id": token_id.clone(),
+                    "token_id": token_id.clone(),
+                    "result": res,
                 })
-                .to_string()
-                .as_bytes(),
+                    .to_string()
+                    .as_bytes(),
             );
-            token_series.tokens.insert(&token_id);
         }
         token_series.is_mintable = true;
 
