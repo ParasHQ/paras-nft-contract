@@ -468,19 +468,6 @@ impl Contract {
             tokens_per_owner.insert(&owner_id, &token_ids);
         }
 
-        env::log(
-            json!({
-                "type": "nft_transfer",
-                "params": {
-                    "token_id": token_id,
-                    "sender_id": "",
-                    "receiver_id": owner_id,
-                }
-            })
-                .to_string()
-                .as_bytes(),
-        );
-
         token_id
     }
 
