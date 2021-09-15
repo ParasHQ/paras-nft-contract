@@ -364,6 +364,16 @@ impl Contract {
         self.token_series_by_id.insert(&token_series_id, &token_series);
     }
 
+    pub fn migrate_new_supply(&mut self, token_series_id: TokenSeriesId) {
+        assert!(
+            ["runner0.paras.near","runner1.paras.near", "runner2.paras.near", "runner3.paras.near", "runner4.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
+            "Not allowed",
+        );
+        let mut token_series = self.token_series_by_id.get(&token_series_id).unwrap();
+        token_series.tokens = UnorderedSet::new(format!("{}n", token_series_id).into_bytes());
+        self.token_series_by_id.insert(&token_series_id, &token_series);
+    }
+
     pub fn migrate_clear_supply(&mut self, token_series_id: TokenSeriesId) {
         assert!(
             ["runner0.paras.near","runner1.paras.near", "runner2.paras.near", "runner3.paras.near", "runner4.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
