@@ -351,6 +351,137 @@ impl Contract {
         token_id
     }
 
+    pub fn migrate_fix_supply(&mut self, token_series_id: TokenSeriesId, start: u32, limit: u32) {
+        assert!(
+            ["runner0.paras.near","runner1.paras.near", "runner2.paras.near", "runner3.paras.near", "runner4.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
+            "Not allowed",
+        );
+
+        let mut token_series = self.token_series_by_id.get(&token_series_id).unwrap();
+        for i in start..limit {
+            let filler_id = format!("{}{}{}", &token_series_id, TOKEN_DELIMETER, i);
+            token_series.tokens.insert(&filler_id);
+            if token_series.tokens.len() >= token_series.metadata.copies.unwrap_or(u64::MAX) {
+                env::log(
+                    json!({
+                        "type": "nft_set_series_non_mintable",
+                        "params": {
+                            "token_series_id": token_series_id,
+                        }
+                    })
+                        .to_string()
+                        .as_bytes(),
+                );
+                break
+            }
+        }
+
+        self.token_series_by_id.insert(&token_series_id, &token_series);
+    }
+
+    #[payable]
+    pub fn migrate_mint(
+        &mut self,
+        token_series_id: TokenSeriesId,
+        receiver_id: AccountId,
+        issued_at: String,
+        edition_id: U64,
+    ) {
+        assert!(
+            ["runner0.paras.near","runner1.paras.near", "runner2.paras.near", "runner3.paras.near", "runner4.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
+            "Not allowed",
+        );
+
+        self.internal_migrate_mint(
+            &token_series_id,
+            &receiver_id,
+            &issued_at,
+            &format!("{}", edition_id.0),
+        );
+    }
+
+    fn internal_migrate_mint(
+        &mut self,
+        token_series_id: &TokenSeriesId,
+        receiver_id: &AccountId,
+        issued_at: &String,
+        edition_id: &String,
+    ) -> TokenId {
+        let mut token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
+        assert!(
+            token_series.is_mintable,
+            "Paras: Token series is not mintable"
+        );
+
+        let num_tokens = token_series.tokens.len();
+        let max_copies = token_series.metadata.copies.unwrap_or(u64::MAX);
+        assert_ne!(num_tokens, max_copies, "Series supply maxed");
+
+        if (num_tokens + 1) == max_copies {
+            token_series.is_mintable = false;
+        }
+
+        let token_id = format!("{}{}{}", &token_series_id, TOKEN_DELIMETER, &edition_id);
+
+        assert_eq!(
+            token_series.tokens.contains(&token_id),
+            false,
+            "Duplicate token"
+        );
+
+        token_series.tokens.insert(&token_id);
+        self.token_series_by_id.insert(&token_series_id, &token_series);
+
+        // you can add custom metadata to each token here
+        let metadata = Some(TokenMetadata {
+            title: None,          // ex. "Arch Nemesis: Mail Carrier" or "Parcel #5055"
+            description: None,    // free-form description
+            media: None, // URL to associated media, preferably to decentralized, content-addressed storage
+            media_hash: None, // Base64-encoded sha256 hash of content referenced by the `media` field. Required if `media` is included.
+            copies: None, // number of copies of this set of metadata in existence when token was minted.
+            issued_at: Some(issued_at.clone()), // ISO 8601 datetime when token was issued or minted
+            expires_at: None, // ISO 8601 datetime when token expires
+            starts_at: None, // ISO 8601 datetime when token starts being valid
+            updated_at: None, // ISO 8601 datetime when token was last updated
+            extra: None, // anything extra the NFT wants to store on-chain. Can be stringified JSON.
+            reference: None, // URL to an off-chain JSON file with more info.
+            reference_hash: None, // Base64-encoded sha256 hash of JSON from reference field. Required if `reference` is included.
+        });
+
+        let owner_id: AccountId = receiver_id.into();
+        self.tokens.owner_by_id.insert(&token_id, &owner_id);
+
+        self.tokens
+            .token_metadata_by_id
+            .as_mut()
+            .and_then(|by_id| by_id.insert(&token_id, &metadata.as_ref().unwrap()));
+
+        if let Some(tokens_per_owner) = &mut self.tokens.tokens_per_owner {
+            let mut token_ids = tokens_per_owner.get(&owner_id).unwrap_or_else(|| {
+                UnorderedSet::new(StorageKey::TokensPerOwner {
+                    account_hash: env::sha256(&owner_id.as_bytes()),
+                })
+            });
+            token_ids.insert(&token_id);
+            tokens_per_owner.insert(&owner_id, &token_ids);
+        }
+
+        env::log(
+            json!({
+                "type": "nft_transfer",
+                "params": {
+                    "token_id": token_id,
+                    "sender_id": "",
+                    "receiver_id": owner_id,
+                }
+            })
+                .to_string()
+                .as_bytes(),
+        );
+
+        token_id
+    }
+
     #[payable]
     pub fn nft_set_series_non_mintable(&mut self, token_series_id: TokenSeriesId) {
         assert_one_yocto();
