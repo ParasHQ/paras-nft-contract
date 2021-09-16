@@ -699,8 +699,12 @@ impl Contract {
         (TOKEN_DELIMETER, TITLE_DELIMETER, EDITION_DELIMETER)
     }
 
-    pub fn nft_get_series_price(self, token_series_id: TokenSeriesId) -> U128 {
-        self.token_series_by_id.get(&token_series_id).unwrap().price.into()
+    pub fn nft_get_series_price(self, token_series_id: TokenSeriesId) -> Option<U128> {
+        let price = self.token_series_by_id.get(&token_series_id).unwrap().price;
+        match price {
+            Some(p) => return Some(U128::from(p)),
+            None => return None
+        };
     }
 
     pub fn nft_get_series(
