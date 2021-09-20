@@ -11,7 +11,7 @@ use near_sdk::collections::{LazyOption, UnorderedMap, UnorderedSet};
 use near_sdk::json_types::{ValidAccountId, U128, U64};
 use near_sdk::{
     assert_one_yocto, env, near_bindgen, serde_json::json, AccountId, Balance, BorshStorageKey,
-    PanicOnDefault, Promise, PromiseOrValue,
+    PanicOnDefault, Promise, PromiseOrValue, Gas, ext_contract
 };
 use near_sdk::serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -24,8 +24,35 @@ pub const TITLE_DELIMETER: &str = " #";
 pub const EDITION_DELIMETER: &str = "/";
 pub const TREASURY_FEE: u128 = 500; // 500 / 10_000 = 0.05
 
+const GAS_FOR_RESOLVE_TRANSFER: Gas = 10_000_000_000_000;
+const GAS_FOR_NFT_TRANSFER_CALL: Gas = 30_000_000_000_000 + GAS_FOR_RESOLVE_TRANSFER;
+const NO_DEPOSIT: Balance = 0;
+
 pub type TokenSeriesId = String;
 pub type Payout = HashMap<AccountId, U128>;
+
+#[ext_contract(ext_non_fungible_token_receiver)]
+trait NonFungibleTokenReceiver {
+    /// Returns `true` if the token should be returned back to the sender.
+    fn nft_on_transfer(
+        &mut self,
+        sender_id: AccountId,
+        previous_owner_id: AccountId,
+        token_id: TokenId,
+        msg: String,
+    ) -> Promise;
+}
+
+#[ext_contract(ext_self)]
+trait NonFungibleTokenResolver {
+    fn nft_resolve_transfer(
+        &mut self,
+        previous_owner_id: AccountId,
+        receiver_id: AccountId,
+        token_id: TokenId,
+        approved_account_ids: Option<HashMap<AccountId, u64>>,
+    ) -> bool;
+}
 
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct TokenSeries {
@@ -660,11 +687,10 @@ impl Contract {
         memo: Option<String>,
         msg: String,
     ) -> PromiseOrValue<bool> {
-        let receiver_id_str = receiver_id.to_string();
+        assert_one_yocto();
         let sender_id = env::predecessor_account_id();
-        let nft_transfer_call_ret =
-            self.tokens
-                .nft_transfer_call(receiver_id, token_id.clone(), approval_id, memo, msg);
+        let receiver_id_str: String = receiver_id.clone().into();
+
         env::log(
             json!({
                 "type": "nft_transfer",
@@ -674,10 +700,37 @@ impl Contract {
                     "receiver_id": receiver_id_str
                 }
             })
-            .to_string()
-            .as_bytes(),
+                .to_string()
+                .as_bytes(),
         );
-        nft_transfer_call_ret
+
+        let (old_owner, old_approvals) = self.tokens.internal_transfer(
+            &sender_id,
+            receiver_id.as_ref(),
+            &token_id,
+            approval_id,
+            memo,
+        );
+        // Initiating receiver's call and the callback
+        ext_non_fungible_token_receiver::nft_on_transfer(
+            sender_id,
+            old_owner.clone(),
+            token_id.clone(),
+            msg,
+            receiver_id.as_ref(),
+            NO_DEPOSIT,
+            env::prepaid_gas() - GAS_FOR_NFT_TRANSFER_CALL,
+        )
+        .then(ext_self::nft_resolve_transfer(
+            old_owner,
+            receiver_id.into(),
+            token_id,
+            old_approvals,
+            &env::current_account_id(),
+            NO_DEPOSIT,
+            GAS_FOR_RESOLVE_TRANSFER,
+        ))
+        .into()
     }
 
     // CUSTOM enumeration standard modified here because no macro below
