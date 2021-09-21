@@ -447,6 +447,12 @@ impl Contract {
             "Paras: Creator only"
         );
 
+        assert_eq!(
+            token_series.is_mintable,
+            true,
+            "Paras: token series is not mintable"
+        );
+
         if price.is_none() {
             token_series.price = None;
         } else {
