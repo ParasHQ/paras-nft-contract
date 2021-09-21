@@ -689,21 +689,6 @@ impl Contract {
     ) -> PromiseOrValue<bool> {
         assert_one_yocto();
         let sender_id = env::predecessor_account_id();
-        let receiver_id_str: String = receiver_id.clone().into();
-
-        env::log(
-            json!({
-                "type": "nft_transfer",
-                "params": {
-                    "token_id": token_id,
-                    "sender_id": sender_id,
-                    "receiver_id": receiver_id_str
-                }
-            })
-                .to_string()
-                .as_bytes(),
-        );
-
         let (old_owner, old_approvals) = self.tokens.internal_transfer(
             &sender_id,
             receiver_id.as_ref(),
@@ -910,12 +895,29 @@ impl NonFungibleTokenResolver for Contract {
         token_id: TokenId,
         approved_account_ids: Option<HashMap<AccountId, u64>>,
     ) -> bool {
-        self.tokens.nft_resolve_transfer(
-            previous_owner_id,
-            receiver_id,
-            token_id,
+        let resp: bool = self.tokens.nft_resolve_transfer(
+            previous_owner_id.clone(),
+            receiver_id.clone(),
+            token_id.clone(),
             approved_account_ids,
-        )
+        );
+
+        if resp {
+            env::log(
+                json!({
+                "type": "nft_transfer",
+                "params": {
+                    "token_id": token_id,
+                    "sender_id": previous_owner_id,
+                    "receiver_id": receiver_id,
+                }
+            })
+                    .to_string()
+                    .as_bytes(),
+            );
+        }
+
+        resp
     }
 }
 
