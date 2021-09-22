@@ -364,15 +364,15 @@ impl Contract {
             .as_mut()
             .and_then(|by_id| by_id.insert(&token_id, &metadata.as_ref().unwrap()));
 
-        if let Some(tokens_per_owner) = &mut self.tokens.tokens_per_owner {
-            let mut token_ids = tokens_per_owner.get(&owner_id).unwrap_or_else(|| {
-                UnorderedSet::new(StorageKey::TokensPerOwner {
-                    account_hash: env::sha256(&owner_id.as_bytes()),
-                })
-            });
-            token_ids.insert(&token_id);
-            tokens_per_owner.insert(&owner_id, &token_ids);
-        }
+         if let Some(tokens_per_owner) = &mut self.tokens.tokens_per_owner {
+             let mut token_ids = tokens_per_owner.get(&owner_id).unwrap_or_else(|| {
+                 UnorderedSet::new(StorageKey::TokensPerOwner {
+                     account_hash: env::sha256(&owner_id.as_bytes()),
+                 })
+             });
+             token_ids.insert(&token_id);
+             tokens_per_owner.insert(&owner_id, &token_ids);
+         }
 
 
         token_id
@@ -657,6 +657,30 @@ impl Contract {
     }
 
     // CUSTOM core standard repeated here because no macro below
+
+    pub fn nft_transfer_unsafe(
+        &mut self,
+        receiver_id: ValidAccountId,
+        token_id: TokenId,
+        approval_id: Option<u64>,
+        memo: Option<String>,
+    ) {
+        let sender_id = env::predecessor_account_id();
+        let receiver_id_str = receiver_id.to_string();
+        self.tokens.internal_transfer(&sender_id, &receiver_id_str, &token_id, approval_id, memo);
+        env::log(
+            json!({
+                "type": "nft_transfer",
+                "params": {
+                    "token_id": token_id,
+                    "sender_id": sender_id,
+                    "receiver_id": receiver_id_str
+                }
+            })
+                .to_string()
+                .as_bytes(),
+        );
+    }
 
     #[payable]
     pub fn nft_transfer(
@@ -951,7 +975,7 @@ mod tests {
     use near_sdk::test_utils::{accounts, VMContextBuilder};
     use near_sdk::MockedBlockchain;
     use near_sdk::{testing_env};
-    
+
     const STORAGE_FOR_CREATE_SERIES: Balance = 8540000000000000000000;
     const STORAGE_FOR_MINT: Balance = 11280000000000000000000;
 
@@ -995,7 +1019,7 @@ mod tests {
     }
 
     fn create_series(
-        contract: &mut Contract, 
+        contract: &mut Contract,
         royalty: &HashMap<AccountId, u32>,
         price: Option<U128>,
         copies: Option<u64>,
@@ -1036,8 +1060,8 @@ mod tests {
         let mut royalty: HashMap<AccountId, u32> = HashMap::new();
         royalty.insert(accounts(1).to_string(), 1000);
         create_series(
-            &mut contract, 
-            &royalty, 
+            &mut contract,
+            &royalty,
             Some(U128::from(1 * 10u128.pow(24))),
             None
         );
@@ -1087,8 +1111,8 @@ mod tests {
         royalty.insert(accounts(1).to_string(), 1000);
 
         create_series(
-            &mut contract, 
-            &royalty, 
+            &mut contract,
+            &royalty,
             Some(U128::from(1 * 10u128.pow(24))),
             None
         );
@@ -1367,6 +1391,42 @@ mod tests {
     }
 
     #[test]
+    fn test_nft_transfer_unsafe() {
+        let (mut context, mut contract) = setup_contract();
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
+            .build()
+        );
+
+        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
+        royalty.insert(accounts(1).to_string(), 1000);
+
+        create_series(&mut contract, &royalty, None, None);
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_MINT)
+            .build()
+        );
+
+        let token_id = contract.nft_mint("1".to_string(), accounts(2));
+
+        testing_env!(context
+            .predecessor_account_id(accounts(2))
+            .build()
+        );
+
+        contract.nft_transfer_unsafe(accounts(3), token_id.clone(), None, None);
+
+        let token = contract.nft_token(token_id).unwrap();
+        assert_eq!(
+            token.owner_id,
+            accounts(3).to_string()
+        )
+    }
+
+    #[test]
     fn test_nft_transfer_payout() {
         let (mut context, mut contract) = setup_contract();
         testing_env!(context
@@ -1395,8 +1455,8 @@ mod tests {
         );
 
         let payout = contract.nft_transfer_payout(
-            accounts(3), 
-            token_id.clone(), 
+            accounts(3),
+            token_id.clone(),
             Some(0) ,
             Some(U128::from(1 * 10u128.pow(24))),
             Some(10)
@@ -1404,11 +1464,11 @@ mod tests {
 
         let mut payout_calc: HashMap<AccountId, U128> = HashMap::new();
         payout_calc.insert(
-            accounts(1).to_string(), 
+            accounts(1).to_string(),
             U128::from((1000 * (1 * 10u128.pow(24)))/10_000)
         );
         payout_calc.insert(
-            accounts(2).to_string(), 
+            accounts(2).to_string(),
             U128::from((9000 * (1 * 10u128.pow(24))) / 10_000)
         );
 
