@@ -299,9 +299,9 @@ impl Contract {
 
         let num_tokens = token_series.tokens.len();
         let max_copies = token_series.metadata.copies.unwrap_or(u64::MAX);
-        assert_ne!(num_tokens, max_copies, "Series supply maxed");
+        assert!(num_tokens < max_copies, "Series supply maxed");
 
-        if (num_tokens + 1) == max_copies {
+        if (num_tokens + 1) >= max_copies {
             token_series.is_mintable = false;
         }
 
@@ -447,6 +447,12 @@ impl Contract {
             "Paras: Creator only"
         );
 
+        assert_eq!(
+            token_series.is_mintable,
+            true,
+            "Paras: token series is not mintable"
+        );
+
         if price.is_none() {
             token_series.price = None;
         } else {
@@ -528,8 +534,12 @@ impl Contract {
         (TOKEN_DELIMETER, TITLE_DELIMETER, EDITION_DELIMETER)
     }
 
-    pub fn nft_get_price(self, token_series_id: TokenSeriesId) -> Option<Balance> {
-        self.token_series_by_id.get(&token_series_id).unwrap().price
+    pub fn nft_get_series_price(self, token_series_id: TokenSeriesId) -> Option<U128> {
+        let price = self.token_series_by_id.get(&token_series_id).unwrap().price;
+        match price {
+            Some(p) => return Some(U128::from(p)),
+            None => return None
+        };
     }
 
     pub fn nft_get_series(
