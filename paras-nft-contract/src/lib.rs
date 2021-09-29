@@ -819,6 +819,7 @@ impl Contract {
         balance: U128, 
         max_len_payout: u32
     ) -> Payout{
+        let owner_id = self.tokens.owner_by_id.get(&token_id).expect("No token id");
         let mut token_id_iter = token_id.split(TOKEN_DELIMETER);
         let token_series_id = token_id_iter.next().unwrap().parse().unwrap();
         let royalty = self.token_series_by_id.get(&token_series_id).expect("no type").royalty;
@@ -828,10 +829,16 @@ impl Contract {
         let balance_u128: u128 = balance.into();
 
         let mut payout: Payout = HashMap::new();
+        let mut total_perpetual = 0;
+
         for (k, v) in royalty.iter() {
-            let key = k.clone();
-            payout.insert(key, royalty_to_payout(*v, balance_u128));
+            if *k != owner_id {
+                let key = k.clone();
+                payout.insert(key, royalty_to_payout(*v, balance_u128));
+                total_perpetual += *v;
+            }
         }
+        payout.insert(owner_id, royalty_to_payout(10000 - total_perpetual, balance_u128));
         payout
     }
 
