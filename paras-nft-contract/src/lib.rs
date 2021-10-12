@@ -741,13 +741,13 @@ impl Contract {
     ) {
         let sender_id = env::predecessor_account_id();
         let receiver_id_str = receiver_id.to_string();
-        self.tokens.internal_transfer(&sender_id, &receiver_id_str, &token_id, approval_id, memo);
+        let (previous_owner_id, _) = self.tokens.internal_transfer(&sender_id, &receiver_id_str, &token_id, approval_id, memo);
         env::log(
             json!({
                 "type": "nft_transfer",
                 "params": {
                     "token_id": token_id,
-                    "sender_id": sender_id,
+                    "sender_id": previous_owner_id,
                     "receiver_id": receiver_id_str
                 }
             })
@@ -764,16 +764,15 @@ impl Contract {
         approval_id: Option<u64>,
         memo: Option<String>,
     ) {
-        let receiver_id_str = receiver_id.to_string();
-        let sender_id = env::predecessor_account_id();
-        self.tokens
-            .nft_transfer(receiver_id, token_id.clone(), approval_id, memo);
+    let previous_owner_id = self.tokens.owner_by_id.get(&token_id).expect("Token not found");
+    let receiver_id_str = receiver_id.to_string();
+    self.tokens.nft_transfer(receiver_id, token_id.clone(), approval_id, memo);
         env::log(
             json!({
                 "type": "nft_transfer",
                 "params": {
                     "token_id": token_id,
-                    "sender_id": sender_id,
+                    "sender_id": previous_owner_id,
                     "receiver_id": receiver_id_str
                 }
             })
