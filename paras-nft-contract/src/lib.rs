@@ -26,6 +26,8 @@ pub const TREASURY_FEE: u128 = 500; // 500 / 10_000 = 0.05
 
 const GAS_FOR_RESOLVE_TRANSFER: Gas = 10_000_000_000_000;
 const GAS_FOR_NFT_TRANSFER_CALL: Gas = 30_000_000_000_000 + GAS_FOR_RESOLVE_TRANSFER;
+const GAS_FOR_NFT_APPROVE: Gas = 10_000_000_000_000;
+const GAS_FOR_MINT: Gas = 90_000_000_000_000;
 const NO_DEPOSIT: Balance = 0;
 
 pub type TokenSeriesId = String;
@@ -41,6 +43,17 @@ trait NonFungibleTokenReceiver {
         token_id: TokenId,
         msg: String,
     ) -> Promise;
+}
+
+#[ext_contract(ext_approval_receiver)]
+pub trait NonFungibleTokenReceiver {
+    fn nft_on_approve(
+        &mut self,
+        token_id: TokenId,
+        owner_id: AccountId,
+        approval_id: u64,
+        msg: String,
+    );
 }
 
 #[ext_contract(ext_self)]
@@ -257,7 +270,7 @@ impl Contract {
             "Paras: attached deposit is less than price : {}",
             price
         );
-        let token_id: TokenId = self._nft_mint_series(token_series_id, receiver_id.clone());
+        let token_id: TokenId = self._nft_mint_series(token_series_id, receiver_id.to_string());
 
         let for_treasury = price as u128 * TREASURY_FEE / 10_000u128;
         let price_deducted = price - for_treasury;
@@ -293,7 +306,7 @@ impl Contract {
 
         let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
         assert_eq!(env::predecessor_account_id(), token_series.creator_id, "Paras: not creator");
-        let token_id: TokenId = self._nft_mint_series(token_series_id, receiver_id.clone());
+        let token_id: TokenId = self._nft_mint_series(token_series_id, receiver_id.to_string());
 
         refund_deposit(env::storage_usage() - initial_storage_usage, 0);
         
@@ -313,10 +326,71 @@ impl Contract {
         token_id
     }
 
+    #[payable]
+    pub fn nft_mint_and_approve(
+        &mut self, 
+        token_series_id: TokenSeriesId, 
+        account_id: ValidAccountId,
+        msg: Option<String>,
+    ) -> Option<Promise> {
+        let initial_storage_usage = env::storage_usage();
+
+        let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
+        assert_eq!(env::predecessor_account_id(), token_series.creator_id, "Paras: not creator");
+        let token_id: TokenId = self._nft_mint_series(token_series_id, token_series.creator_id.clone());
+
+        // Need to copy the nft_approve code here to solve the gas problem
+        // get contract-level LookupMap of token_id to approvals HashMap
+        let approvals_by_id = self.tokens.approvals_by_id.as_mut().unwrap();
+
+        // update HashMap of approvals for this token
+        let approved_account_ids =
+            &mut approvals_by_id.get(&token_id).unwrap_or_else(|| HashMap::new());
+        let account_id: AccountId = account_id.into();
+        let approval_id: u64 =
+            self.tokens.next_approval_id_by_id.as_ref().unwrap().get(&token_id).unwrap_or_else(|| 1u64);
+        approved_account_ids.insert(account_id.clone(), approval_id);
+
+        // save updated approvals HashMap to contract's LookupMap
+        approvals_by_id.insert(&token_id, &approved_account_ids);
+
+        // increment next_approval_id for this token
+        self.tokens.next_approval_id_by_id.as_mut().unwrap().insert(&token_id, &(approval_id + 1));
+
+        refund_deposit(env::storage_usage() - initial_storage_usage, 0);
+
+        env::log(
+            json!({
+                "type": "nft_transfer",
+                "params": {
+                    "token_id": token_id,
+                    "sender_id": "",
+                    "receiver_id": token_series.creator_id,
+                }
+            })
+            .to_string()
+            .as_bytes(),
+        );
+
+        if let Some(msg) = msg {
+            Some(ext_approval_receiver::nft_on_approve(
+                token_id,
+                token_series.creator_id,
+                approval_id,
+                msg,
+                &account_id,
+                NO_DEPOSIT,
+                env::prepaid_gas() - GAS_FOR_NFT_APPROVE - GAS_FOR_MINT,
+            ))
+        } else {
+            None
+        }
+    }
+
     fn _nft_mint_series(
         &mut self, 
         token_series_id: TokenSeriesId, 
-        receiver_id: ValidAccountId
+        receiver_id: AccountId
     ) -> TokenId {
         let mut token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
         assert!(
@@ -356,7 +430,7 @@ impl Contract {
         // From : https://github.com/near/near-sdk-rs/blob/master/near-contract-standards/src/non_fungible_token/core/core_impl.rs#L359
         // This allows lazy minting
 
-        let owner_id: AccountId = receiver_id.into();
+        let owner_id: AccountId = receiver_id;
         self.tokens.owner_by_id.insert(&token_id, &owner_id);
 
         self.tokens
