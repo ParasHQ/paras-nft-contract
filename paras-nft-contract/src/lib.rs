@@ -393,7 +393,6 @@ impl Contract {
         token_series_id: TokenSeriesId,
         receiver_id: AccountId,
         issued_at: String,
-        edition_id: U64,
     ) {
         assert!(
             ["runner0.paras.near","runner1.paras.near", "runner2.paras.near", "runner3.paras.near", "runner4.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
@@ -404,7 +403,6 @@ impl Contract {
             &token_series_id,
             &receiver_id,
             &issued_at,
-            &format!("{}", edition_id.0),
         );
     }
 
@@ -413,7 +411,6 @@ impl Contract {
         token_series_id: &TokenSeriesId,
         receiver_id: &AccountId,
         issued_at: &String,
-        edition_id: &String,
     ) -> TokenId {
         let mut token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
         assert!(
@@ -423,20 +420,13 @@ impl Contract {
 
         let num_tokens = token_series.tokens.len();
         let max_copies = token_series.metadata.copies.unwrap_or(u64::MAX);
-        assert_ne!(num_tokens, max_copies, "Series supply maxed");
+        assert!(num_tokens < max_copies, "Series supply maxed");
 
-        if (num_tokens + 1) == max_copies {
+        if (num_tokens + 1) >= max_copies {
             token_series.is_mintable = false;
         }
 
-        let token_id = format!("{}{}{}", &token_series_id, TOKEN_DELIMETER, &edition_id);
-
-        assert_eq!(
-            token_series.tokens.contains(&token_id),
-            false,
-            "Duplicate token"
-        );
-
+        let token_id = format!("{}{}{}", &token_series_id, TOKEN_DELIMETER, num_tokens + 1);
         token_series.tokens.insert(&token_id);
         self.token_series_by_id.insert(&token_series_id, &token_series);
 
