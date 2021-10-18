@@ -264,6 +264,7 @@ impl Contract {
         price: Option<U128>,
         royalty: Option<HashMap<AccountId, u32>>,
     ) -> TokenSeriesJson {
+        panic!("Contract paused");
         let initial_storage_usage = env::storage_usage();
         let creator_id = env::predecessor_account_id();
 
@@ -349,6 +350,7 @@ impl Contract {
         token_series_id: TokenSeriesId, 
         receiver_id: ValidAccountId
     ) -> TokenId {
+        panic!("Contract paused");
         let initial_storage_usage = env::storage_usage();
 
         let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
@@ -494,6 +496,7 @@ impl Contract {
         token_series_id: TokenSeriesId, 
         receiver_id: ValidAccountId
     ) -> TokenId {
+        panic!("Contract paused");
         let initial_storage_usage = env::storage_usage();
 
         let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
@@ -525,6 +528,7 @@ impl Contract {
         account_id: ValidAccountId,
         msg: Option<String>,
     ) -> Option<Promise> {
+        panic!("Contract paused");
         let initial_storage_usage = env::storage_usage();
 
         let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
@@ -646,6 +650,7 @@ impl Contract {
 
     #[payable]
     pub fn nft_set_series_non_mintable(&mut self, token_series_id: TokenSeriesId) {
+        panic!("Contract paused");
         assert_one_yocto();
 
         let mut token_series = self.token_series_by_id.get(&token_series_id).expect("Token series not exist");
@@ -687,6 +692,7 @@ impl Contract {
         token_series_id: TokenSeriesId, 
         decrease_copies: U64
     ) -> U64 {
+        panic!("Contract paused");
         assert_one_yocto();
 
         let mut token_series = self.token_series_by_id.get(&token_series_id).expect("Token series not exist");
@@ -731,6 +737,7 @@ impl Contract {
 
     #[payable]
     pub fn nft_set_series_price(&mut self, token_series_id: TokenSeriesId, price: Option<U128>) -> Option<U128> {
+        panic!("Contract paused");
         assert_one_yocto();
 
         let mut token_series = self.token_series_by_id.get(&token_series_id).expect("Token series not exist");
@@ -769,6 +776,7 @@ impl Contract {
 
     #[payable]
     pub fn nft_burn(&mut self, token_id: TokenId) {
+        panic!("Contract paused");
         assert_one_yocto();
 
         let owner_id = self.tokens.owner_by_id.get(&token_id).unwrap();
@@ -931,6 +939,7 @@ impl Contract {
         approval_id: Option<u64>,
         memo: Option<String>,
     ) {
+        panic!("Contract paused");
         let sender_id = env::predecessor_account_id();
         let receiver_id_str = receiver_id.to_string();
         let (previous_owner_id, _) = self.tokens.internal_transfer(&sender_id, &receiver_id_str, &token_id, approval_id, memo);
@@ -956,9 +965,10 @@ impl Contract {
         approval_id: Option<u64>,
         memo: Option<String>,
     ) {
-    let previous_owner_id = self.tokens.owner_by_id.get(&token_id).expect("Token not found");
-    let receiver_id_str = receiver_id.to_string();
-    self.tokens.nft_transfer(receiver_id, token_id.clone(), approval_id, memo);
+        panic!("Contract paused");
+        let previous_owner_id = self.tokens.owner_by_id.get(&token_id).expect("Token not found");
+        let receiver_id_str = receiver_id.to_string();
+        self.tokens.nft_transfer(receiver_id, token_id.clone(), approval_id, memo);
         env::log(
             json!({
                 "type": "nft_transfer",
@@ -966,7 +976,7 @@ impl Contract {
                     "token_id": token_id,
                     "sender_id": previous_owner_id,
                     "receiver_id": receiver_id_str
-                }
+            }
             })
             .to_string()
             .as_bytes(),
@@ -982,6 +992,7 @@ impl Contract {
         memo: Option<String>,
         msg: String,
     ) -> PromiseOrValue<bool> {
+        panic!("Contract paused");
         assert_one_yocto();
         let sender_id = env::predecessor_account_id();
         let (old_owner, old_approvals) = self.tokens.internal_transfer(
@@ -1116,6 +1127,7 @@ impl Contract {
         balance: Option<U128>,
         max_len_payout: Option<u32>
     ) -> Option<Payout> {
+        panic!("Contract paused");
         assert_one_yocto();
 
         // Transfer
