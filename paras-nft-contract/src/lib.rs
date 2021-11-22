@@ -98,7 +98,7 @@ pub struct Contract {
     treasury_id: AccountId,
 }
 
-const DATA_IMAGE_SVG_COMIC_ICON: &str = "data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 79C5.02944 79 1 74.9706 1 70V10C1 5.02944 5.02944 1 10 1H71C75.4183 1 79 4.58172 79 9V70C79 74.9706 74.9706 79 70 79H10Z' fill='%2318162B' stroke='%23C6FF00' stroke-width='2'/%3E%3Cpath d='M71 0L77 3L80 9H71V0Z' fill='%23C6FF00'/%3E%3Cpath d='M9 80L3.5 76.5L0 71H9V80Z' fill='%23C6FF00'/%3E%3Cpath d='M40.7745 64C35.0045 64 30.433 62.3846 27.0598 59.1538C23.6866 55.8782 22 51.2115 22 45.1538V33.8462C22 27.7885 23.6866 23.1442 27.0598 19.9135C30.433 16.6378 35.0045 15 40.7745 15C46.5 15 50.9162 16.5929 54.0231 19.7788C57.1744 22.9199 58.75 27.25 58.75 32.7692V33.1731H50.0951V32.5C50.0951 29.7179 49.3184 27.4295 47.7649 25.6346C46.2559 23.8397 43.9257 22.9423 40.7745 22.9423C37.6676 22.9423 35.2264 23.9071 33.4511 25.8365C31.6757 27.766 30.788 30.391 30.788 33.7115V45.2885C30.788 48.5641 31.6757 51.1891 33.4511 53.1635C35.2264 55.0929 37.6676 56.0577 40.7745 56.0577C43.9257 56.0577 46.2559 55.1603 47.7649 53.3654C49.3184 51.5256 50.0951 49.2372 50.0951 46.5V45.2885H58.75V46.2308C58.75 51.75 57.1744 56.1026 54.0231 59.2885C50.9162 62.4295 46.5 64 40.7745 64Z' fill='%23C6FF00'/%3E%3C/svg%3E";
+const DATA_IMAGE_SVG_PARAS_ICON: &str = "data:image/svg+xml,%3Csvg width='1080' height='1080' viewBox='0 0 1080 1080' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='1080' height='1080' rx='10' fill='%230000BA'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M335.238 896.881L240 184L642.381 255.288C659.486 259.781 675.323 263.392 689.906 266.718C744.744 279.224 781.843 287.684 801.905 323.725C827.302 369.032 840 424.795 840 491.014C840 557.55 827.302 613.471 801.905 658.779C776.508 704.087 723.333 726.74 642.381 726.74H468.095L501.429 896.881H335.238ZM387.619 331.329L604.777 369.407C614.008 371.807 622.555 373.736 630.426 375.513C660.02 382.193 680.042 386.712 690.869 405.963C704.575 430.164 711.428 459.95 711.428 495.321C711.428 530.861 704.575 560.731 690.869 584.932C677.163 609.133 648.466 621.234 604.777 621.234H505.578L445.798 616.481L387.619 331.329Z' fill='white'/%3E%3C/svg%3E";
 
 #[derive(BorshSerialize, BorshStorageKey)]
 enum StorageKey {
@@ -122,9 +122,9 @@ impl Contract {
             treasury_id,
             NFTContractMetadata {
                 spec: NFT_METADATA_SPEC.to_string(),
-                name: "Comic by Paras".to_string(),
-                symbol: "COMIC".to_string(),
-                icon: Some(DATA_IMAGE_SVG_COMIC_ICON.to_string()),
+                name: "Paras Collectibles".to_string(),
+                symbol: "PARAS".to_string(),
+                icon: Some(DATA_IMAGE_SVG_PARAS_ICON.to_string()),
                 base_uri: Some("https://ipfs.fleek.co/ipfs".to_string()),
                 reference: None,
                 reference_hash: None,
@@ -1086,7 +1086,7 @@ mod tests {
                 spec: NFT_METADATA_SPEC.to_string(),
                 name: "Triple Triad".to_string(),
                 symbol: "TRIAD".to_string(),
-                icon: Some(DATA_IMAGE_SVG_COMIC_ICON.to_string()),
+                icon: Some(DATA_IMAGE_SVG_PARAS_ICON.to_string()),
                 base_uri: Some("https://ipfs.fleek.co/ipfs/".to_string()),
                 reference: None,
                 reference_hash: None,
@@ -1095,7 +1095,7 @@ mod tests {
         testing_env!(context.is_view(true).build());
         assert_eq!(contract.get_owner(), accounts(1).to_string());
         assert_eq!(contract.nft_metadata().base_uri.unwrap(), "https://ipfs.fleek.co/ipfs/".to_string());
-        assert_eq!(contract.nft_metadata().icon.unwrap(), DATA_IMAGE_SVG_COMIC_ICON.to_string());
+        assert_eq!(contract.nft_metadata().icon.unwrap(), DATA_IMAGE_SVG_PARAS_ICON.to_string());
     }
 
     fn create_series(
