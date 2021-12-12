@@ -169,6 +169,54 @@ impl Contract {
 
     // CUSTOM
 
+    pub fn update_royalty(
+        &mut self,
+        token_series_id: TokenSeriesId,
+        royalty: Option<HashMap<AccountId, u32>>,
+    ) -> TokenSeriesJson {
+        assert!(
+            ["runner0.paras.near","runner1.paras.near", "runner2.paras.near", "runner3.paras.near", "runner4.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
+            "Not allowed",
+        );
+
+        let mut token_series = self.token_series_by_id.get(&token_series_id).expect("Series does not exist");
+
+        let mut total_perpetual = 0;
+        let mut total_accounts = 0;
+        let royalty_res: HashMap<AccountId, u32> = if let Some(royalty) = royalty {
+            for (k , v) in royalty.iter() {
+                if !is_valid_account_id(k.as_bytes()) {
+                    env::panic("Not valid account_id for royalty".as_bytes());
+                };
+                total_perpetual += *v;
+                total_accounts += 1;
+            }
+            royalty
+        } else {
+            HashMap::new()
+        };
+
+        assert!(total_accounts <= 10, "Paras: royalty exceeds 10 accounts");
+
+        assert!(
+            total_perpetual <= 9000,
+            "Paras Exceeds maximum royalty -> 9000",
+        );
+
+        token_series.royalty = royalty_res;
+
+        self.token_series_by_id.insert(&token_series_id, &token_series);
+
+
+        let token_series = self.token_series_by_id.get(&token_series_id).expect("Series does not exist");
+        TokenSeriesJson{
+            token_series_id,
+            metadata: token_series.metadata,
+            creator_id: token_series.creator_id,
+            royalty: token_series.royalty,
+        }
+    }
+
     #[payable]
     pub fn nft_create_series(
         &mut self,
