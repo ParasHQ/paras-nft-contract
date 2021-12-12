@@ -15,6 +15,7 @@ use near_sdk::{
 };
 use near_sdk::serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use near_sdk::env::is_valid_account_id;
 
 /// between token_series_id and edition number e.g. 42:2 where 42 is series and 2 is edition
 pub const TOKEN_DELIMETER: char = ':';
@@ -196,8 +197,11 @@ impl Contract {
 
         let mut total_perpetual = 0;
         let mut total_accounts = 0;
-        let royalty_res = if let Some(royalty) = royalty {
-            for (_, v) in royalty.iter() {
+        let royalty_res: HashMap<AccountId, u32> = if let Some(royalty) = royalty {
+            for (k , v) in royalty.iter() {
+                if !is_valid_account_id(k.as_bytes()) {
+                    env::panic("Not valid account_id for royalty".as_bytes());
+                };
                 total_perpetual += *v;
                 total_accounts += 1;
             }
