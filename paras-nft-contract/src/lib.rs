@@ -16,6 +16,9 @@ use near_sdk::{
 use near_sdk::serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+pub mod event;
+pub use event::NearEvent;
+
 /// between token_series_id and edition number e.g. 42:2 where 42 is series and 2 is edition
 pub const TOKEN_DELIMETER: char = ':';
 /// TokenMetadata.title returned for individual token e.g. "Title — 2/10" where 10 is max copies
@@ -284,18 +287,10 @@ impl Contract {
 
         refund_deposit(env::storage_usage() - initial_storage_usage, price);
 
-        env::log(
-            json!({
-                "type": "nft_transfer",
-                "params": {
-                    "token_id": token_id,
-                    "sender_id": "",
-                    "receiver_id": receiver_id,
-                    "price": price.to_string(),
-                }
-            })
-            .to_string()
-            .as_bytes(),
+        NearEvent::log_nft_mint(
+            receiver_id.to_string(),
+            vec![token_id.clone()],
+            Some(json!({"price": price.to_string()}).to_string())
         );
 
         token_id
@@ -314,18 +309,11 @@ impl Contract {
         let token_id: TokenId = self._nft_mint_series(token_series_id, receiver_id.to_string());
 
         refund_deposit(env::storage_usage() - initial_storage_usage, 0);
-        
-        env::log(
-            json!({
-                "type": "nft_transfer",
-                "params": {
-                    "token_id": token_id,
-                    "sender_id": "",
-                    "receiver_id": receiver_id,
-                }
-            })
-            .to_string()
-            .as_bytes(),
+
+        NearEvent::log_nft_mint(
+            receiver_id.to_string(),
+            vec![token_id.clone()],
+            None,
         );
 
         token_id
@@ -364,17 +352,10 @@ impl Contract {
 
         refund_deposit(env::storage_usage() - initial_storage_usage, 0);
 
-        env::log(
-            json!({
-                "type": "nft_transfer",
-                "params": {
-                    "token_id": token_id,
-                    "sender_id": "",
-                    "receiver_id": token_series.creator_id,
-                }
-            })
-            .to_string()
-            .as_bytes(),
+        NearEvent::log_nft_mint(
+            token_series.creator_id.clone(),
+            vec![token_id.clone()],
+            None,
         );
 
         if let Some(msg) = msg {
@@ -610,17 +591,12 @@ impl Contract {
         }
 
         self.tokens.owner_by_id.remove(&token_id);
-        env::log(
-            json!({
-                "type": "nft_transfer",
-                "params": {
-                    "token_id": token_id,
-                    "sender_id": owner_id,
-                    "receiver_id": "",
-                }
-            })
-            .to_string()
-            .as_bytes(),
+
+        NearEvent::log_nft_burn(
+            owner_id,
+            vec![token_id],
+            None,
+            None,
         );
     }
 
@@ -746,18 +722,20 @@ impl Contract {
     ) {
         let sender_id = env::predecessor_account_id();
         let receiver_id_str = receiver_id.to_string();
-        let (previous_owner_id, _) = self.tokens.internal_transfer(&sender_id, &receiver_id_str, &token_id, approval_id, memo);
-        env::log(
-            json!({
-                "type": "nft_transfer",
-                "params": {
-                    "token_id": token_id,
-                    "sender_id": previous_owner_id,
-                    "receiver_id": receiver_id_str
-                }
-            })
-                .to_string()
-                .as_bytes(),
+        let (previous_owner_id, _) = self.tokens.internal_transfer(&sender_id, &receiver_id_str, &token_id, approval_id, memo.clone());
+
+        let authorized_id : Option<AccountId> = if sender_id != previous_owner_id {
+            Some(sender_id)
+        } else {
+            None
+        };
+
+        NearEvent::log_nft_transfer(
+            previous_owner_id,
+            receiver_id_str,
+            vec![token_id],
+            memo,
+            authorized_id,
         );
     }
 
@@ -769,20 +747,23 @@ impl Contract {
         approval_id: Option<u64>,
         memo: Option<String>,
     ) {
-    let previous_owner_id = self.tokens.owner_by_id.get(&token_id).expect("Token not found");
-    let receiver_id_str = receiver_id.to_string();
-    self.tokens.nft_transfer(receiver_id, token_id.clone(), approval_id, memo);
-        env::log(
-            json!({
-                "type": "nft_transfer",
-                "params": {
-                    "token_id": token_id,
-                    "sender_id": previous_owner_id,
-                    "receiver_id": receiver_id_str
-                }
-            })
-            .to_string()
-            .as_bytes(),
+        let sender_id = env::predecessor_account_id();
+        let previous_owner_id = self.tokens.owner_by_id.get(&token_id).expect("Token not found");
+        let receiver_id_str = receiver_id.to_string();
+        self.tokens.nft_transfer(receiver_id, token_id.clone(), approval_id, memo.clone());
+
+        let authorized_id : Option<AccountId> = if sender_id != previous_owner_id {
+            Some(sender_id)
+        } else {
+             None
+        };
+
+        NearEvent::log_nft_transfer(
+            previous_owner_id,
+            receiver_id_str,
+            vec![token_id],
+            memo,
+             authorized_id,
         );
     }
 
@@ -797,17 +778,32 @@ impl Contract {
     ) -> PromiseOrValue<bool> {
         assert_one_yocto();
         let sender_id = env::predecessor_account_id();
-        let (old_owner, old_approvals) = self.tokens.internal_transfer(
+        let (previous_owner_id, old_approvals) = self.tokens.internal_transfer(
             &sender_id,
             receiver_id.as_ref(),
             &token_id,
             approval_id,
-            memo,
+            memo.clone(),
         );
+
+        let authorized_id : Option<AccountId> = if sender_id != previous_owner_id {
+            Some(sender_id.clone())
+        } else {
+            None
+        };
+
+        NearEvent::log_nft_transfer(
+            previous_owner_id.clone(),
+            receiver_id.to_string(),
+            vec![token_id.clone()],
+            memo,
+            authorized_id,
+        );
+
         // Initiating receiver's call and the callback
         ext_non_fungible_token_receiver::nft_on_transfer(
             sender_id,
-            old_owner.clone(),
+            previous_owner_id.clone(),
             token_id.clone(),
             msg,
             receiver_id.as_ref(),
@@ -815,7 +811,7 @@ impl Contract {
             env::prepaid_gas() - GAS_FOR_NFT_TRANSFER_CALL,
         )
         .then(ext_self::nft_resolve_transfer(
-            old_owner,
+            previous_owner_id,
             receiver_id.into(),
             token_id,
             old_approvals,
@@ -931,12 +927,13 @@ impl Contract {
     ) -> Option<Payout> {
         assert_one_yocto();
 
+        let sender_id = env::predecessor_account_id();
         // Transfer
         let previous_token = self.nft_token(token_id.clone()).expect("no token");
         self.tokens.nft_transfer(receiver_id.clone(), token_id.clone(), approval_id, None);
 
         // Payout calculation
-        let owner_id = previous_token.owner_id;
+        let previous_owner_id = previous_token.owner_id;
         let mut total_perpetual = 0;
         let payout = if let Some(balance) = balance {
             let balance_u128: u128 = u128::from(balance);
@@ -949,7 +946,7 @@ impl Contract {
             assert!(royalty.len() as u32 <= max_len_payout.unwrap(), "Market cannot payout to that many receivers");
             for (k, v) in royalty.iter() {
                 let key = k.clone();
-                if key != owner_id {
+                if key != previous_owner_id {
                     payout.insert(key, royalty_to_payout(*v, balance_u128));
                     total_perpetual += *v;
                 }
@@ -960,23 +957,26 @@ impl Contract {
                 "Total payout overflow"
             );
 
-            payout.insert(owner_id.clone(), royalty_to_payout(10000 - total_perpetual, balance_u128));
+            payout.insert(previous_owner_id.clone(), royalty_to_payout(10000 - total_perpetual, balance_u128));
             Some(payout)
         } else {
             None
         };
-        env::log(
-            json!({
-                "type": "nft_transfer",
-                "params": {
-                    "token_id": token_id,
-                    "sender_id": owner_id,
-                    "receiver_id": receiver_id,
-                }
-            })
-            .to_string()
-            .as_bytes(),
+
+        let authorized_id : Option<AccountId> = if sender_id != previous_owner_id {
+            Some(sender_id)
+        } else {
+            None
+        };
+
+        NearEvent::log_nft_transfer(
+            previous_owner_id,
+            receiver_id.to_string(),
+            vec![token_id],
+            None,
+            authorized_id,
         );
+
         payout
     }
 
@@ -1017,18 +1017,14 @@ impl NonFungibleTokenResolver for Contract {
             approved_account_ids,
         );
 
-        if resp {
-            env::log(
-                json!({
-                "type": "nft_transfer",
-                "params": {
-                    "token_id": token_id,
-                    "sender_id": previous_owner_id,
-                    "receiver_id": receiver_id,
-                }
-            })
-                    .to_string()
-                    .as_bytes(),
+        // if not successful, return nft back to original owner
+        if !resp {
+            NearEvent::log_nft_transfer(
+                receiver_id,
+                previous_owner_id,
+                vec![token_id],
+                None,
+                None,
             );
         }
 
