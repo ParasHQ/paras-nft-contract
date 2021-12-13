@@ -10,6 +10,9 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 near-sdk = "3.1.0"
 near-contract-standards = "3.2.0"
+serde = "1"
+serde_json = "1"
+serde_with = "1"
 
 [profile.release]
 codegen-units = 1
