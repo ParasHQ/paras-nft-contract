@@ -15,6 +15,7 @@ use near_sdk::{
 };
 use near_sdk::serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use near_sdk::env::is_valid_account_id;
 
 pub mod event;
 pub use event::NearEvent;
@@ -34,7 +35,12 @@ const GAS_FOR_MINT: Gas = 90_000_000_000_000;
 const NO_DEPOSIT: Balance = 0;
 
 pub type TokenSeriesId = String;
-pub type Payout = HashMap<AccountId, U128>;
+
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct Payout {
+    pub payout: HashMap<AccountId, U128>,
+}
 
 #[ext_contract(ext_non_fungible_token_receiver)]
 trait NonFungibleTokenReceiver {
@@ -199,8 +205,11 @@ impl Contract {
 
         let mut total_perpetual = 0;
         let mut total_accounts = 0;
-        let royalty_res = if let Some(royalty) = royalty {
-            for (_, v) in royalty.iter() {
+        let royalty_res: HashMap<AccountId, u32> = if let Some(royalty) = royalty {
+            for (k , v) in royalty.iter() {
+                if !is_valid_account_id(k.as_bytes()) {
+                    env::panic("Not valid account_id for royalty".as_bytes());
+                };
                 total_perpetual += *v;
                 total_accounts += 1;
             }
@@ -902,17 +911,17 @@ impl Contract {
 
         let balance_u128: u128 = balance.into();
 
-        let mut payout: Payout = HashMap::new();
+        let mut payout: Payout = Payout { payout: HashMap::new() };
         let mut total_perpetual = 0;
 
         for (k, v) in royalty.iter() {
             if *k != owner_id {
                 let key = k.clone();
-                payout.insert(key, royalty_to_payout(*v, balance_u128));
+                payout.payout.insert(key, royalty_to_payout(*v, balance_u128));
                 total_perpetual += *v;
             }
         }
-        payout.insert(owner_id, royalty_to_payout(10000 - total_perpetual, balance_u128));
+        payout.payout.insert(owner_id, royalty_to_payout(10000 - total_perpetual, balance_u128));
         payout
     }
 
@@ -937,7 +946,7 @@ impl Contract {
         let mut total_perpetual = 0;
         let payout = if let Some(balance) = balance {
             let balance_u128: u128 = u128::from(balance);
-            let mut payout: Payout = HashMap::new();
+            let mut payout: Payout = Payout { payout: HashMap::new() };
 
             let mut token_id_iter = token_id.split(TOKEN_DELIMETER);
             let token_series_id = token_id_iter.next().unwrap().parse().unwrap();
@@ -946,8 +955,8 @@ impl Contract {
             assert!(royalty.len() as u32 <= max_len_payout.unwrap(), "Market cannot payout to that many receivers");
             for (k, v) in royalty.iter() {
                 let key = k.clone();
-                if key != previous_owner_id {
-                    payout.insert(key, royalty_to_payout(*v, balance_u128));
+                if key != owner_id {
+                    payout.payout.insert(key, royalty_to_payout(*v, balance_u128));
                     total_perpetual += *v;
                 }
             }
@@ -957,7 +966,7 @@ impl Contract {
                 "Total payout overflow"
             );
 
-            payout.insert(previous_owner_id.clone(), royalty_to_payout(10000 - total_perpetual, balance_u128));
+            payout.payout.insert(owner_id.clone(), royalty_to_payout(10000 - total_perpetual, balance_u128));
             Some(payout)
         } else {
             None
@@ -1554,7 +1563,7 @@ mod tests {
             U128::from((9000 * (1 * 10u128.pow(24))) / 10_000)
         );
 
-        assert_eq!(payout.unwrap(), payout_calc);
+        assert_eq!(payout.unwrap().payout, payout_calc);
 
         let token = contract.nft_token(token_id).unwrap();
         assert_eq!(
