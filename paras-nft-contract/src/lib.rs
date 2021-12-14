@@ -955,7 +955,7 @@ impl Contract {
             assert!(royalty.len() as u32 <= max_len_payout.unwrap(), "Market cannot payout to that many receivers");
             for (k, v) in royalty.iter() {
                 let key = k.clone();
-                if key != owner_id {
+                if key != previous_owner_id {
                     payout.payout.insert(key, royalty_to_payout(*v, balance_u128));
                     total_perpetual += *v;
                 }
@@ -966,7 +966,7 @@ impl Contract {
                 "Total payout overflow"
             );
 
-            payout.payout.insert(owner_id.clone(), royalty_to_payout(10000 - total_perpetual, balance_u128));
+            payout.payout.insert(previous_owner_id.clone(), royalty_to_payout(10000 - total_perpetual, balance_u128));
             Some(payout)
         } else {
             None
