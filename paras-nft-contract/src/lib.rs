@@ -32,7 +32,12 @@ const GAS_FOR_MINT: Gas = 90_000_000_000_000;
 const NO_DEPOSIT: Balance = 0;
 
 pub type TokenSeriesId = String;
-pub type Payout = HashMap<AccountId, U128>;
+
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct Payout {
+    pub payout: HashMap<AccountId, U128>,
+}
 
 #[ext_contract(ext_non_fungible_token_receiver)]
 trait NonFungibleTokenReceiver {
@@ -910,17 +915,17 @@ impl Contract {
 
         let balance_u128: u128 = balance.into();
 
-        let mut payout: Payout = HashMap::new();
+        let mut payout: Payout = Payout { payout: HashMap::new() };
         let mut total_perpetual = 0;
 
         for (k, v) in royalty.iter() {
             if *k != owner_id {
                 let key = k.clone();
-                payout.insert(key, royalty_to_payout(*v, balance_u128));
+                payout.payout.insert(key, royalty_to_payout(*v, balance_u128));
                 total_perpetual += *v;
             }
         }
-        payout.insert(owner_id, royalty_to_payout(10000 - total_perpetual, balance_u128));
+        payout.payout.insert(owner_id, royalty_to_payout(10000 - total_perpetual, balance_u128));
         payout
     }
 
@@ -944,7 +949,7 @@ impl Contract {
         let mut total_perpetual = 0;
         let payout = if let Some(balance) = balance {
             let balance_u128: u128 = u128::from(balance);
-            let mut payout: Payout = HashMap::new();
+            let mut payout: Payout = Payout { payout: HashMap::new() };
 
             let mut token_id_iter = token_id.split(TOKEN_DELIMETER);
             let token_series_id = token_id_iter.next().unwrap().parse().unwrap();
@@ -954,7 +959,7 @@ impl Contract {
             for (k, v) in royalty.iter() {
                 let key = k.clone();
                 if key != owner_id {
-                    payout.insert(key, royalty_to_payout(*v, balance_u128));
+                    payout.payout.insert(key, royalty_to_payout(*v, balance_u128));
                     total_perpetual += *v;
                 }
             }
@@ -964,7 +969,7 @@ impl Contract {
                 "Total payout overflow"
             );
 
-            payout.insert(owner_id.clone(), royalty_to_payout(10000 - total_perpetual, balance_u128));
+            payout.payout.insert(owner_id.clone(), royalty_to_payout(10000 - total_perpetual, balance_u128));
             Some(payout)
         } else {
             None
@@ -1562,7 +1567,7 @@ mod tests {
             U128::from((9000 * (1 * 10u128.pow(24))) / 10_000)
         );
 
-        assert_eq!(payout.unwrap(), payout_calc);
+        assert_eq!(payout.unwrap().payout, payout_calc);
 
         let token = contract.nft_token(token_id).unwrap();
         assert_eq!(
