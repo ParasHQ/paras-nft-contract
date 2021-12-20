@@ -8,7 +8,7 @@ use near_contract_standards::non_fungible_token::NonFungibleToken;
 use near_contract_standards::non_fungible_token::{Token, TokenId};
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{LazyOption, UnorderedMap, UnorderedSet};
-use near_sdk::json_types::{ValidAccountId, U128, U64};
+use near_sdk::json_types::{ValidAccountId, U128, U64, Base64VecU8};
 use near_sdk::{
     assert_one_yocto, env, near_bindgen, serde_json::json, AccountId, Balance, BorshStorageKey,
     PanicOnDefault, Promise, PromiseOrValue, Gas, ext_contract
@@ -161,6 +161,56 @@ impl Contract {
             metadata: LazyOption::new(StorageKey::Metadata, Some(&metadata)),
             treasury_id: treasury_id.to_string(),
         }
+    }
+
+    pub fn update_metadata(
+        &mut self,
+        spec: Option<String>,
+        name: Option<String>,
+        symbol: Option<String>,
+        icon: Option<String>,
+        base_uri: Option<String>,
+        reference: Option<String>,
+        reference_hash: Option<Base64VecU8>
+    ) -> NFTContractMetadata {
+        assert!(
+            ["runner0.paras.near","runner1.paras.near", "runner2.paras.near", "runner3.paras.near", "runner4.paras.near", self.tokens.owner_id.as_str()].contains(&env::predecessor_account_id().as_str()),
+            "Not allowed",
+        );
+
+        let mut metadata = self.metadata.get().unwrap();
+
+        if spec.is_some() {
+            metadata.spec = spec.unwrap();
+        }
+
+        if name.is_some() {
+            metadata.name = name.unwrap();
+        }
+
+        if symbol.is_some() {
+            metadata.symbol = symbol.unwrap();
+        }
+
+        if icon.is_some() {
+            metadata.icon = icon;
+        }
+
+        if base_uri.is_some() {
+            metadata.base_uri = base_uri;
+        }
+
+        if reference.is_some() {
+            metadata.reference = reference;
+        }
+
+        if reference_hash.is_some() {
+            metadata.reference_hash = reference_hash;
+        }
+
+        self.metadata.replace(&metadata);
+
+        metadata
     }
 
     // Treasury
