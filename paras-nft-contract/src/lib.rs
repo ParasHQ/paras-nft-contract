@@ -33,6 +33,7 @@ const GAS_FOR_NFT_TRANSFER_CALL: Gas = 30_000_000_000_000 + GAS_FOR_RESOLVE_TRAN
 const GAS_FOR_NFT_APPROVE: Gas = 10_000_000_000_000;
 const GAS_FOR_MINT: Gas = 90_000_000_000_000;
 const NO_DEPOSIT: Balance = 0;
+const MAX_PRICE: Balance = 999_999_999 * 10u128.pow(24);
 
 pub type TokenSeriesId = String;
 
@@ -226,6 +227,11 @@ impl Contract {
         );
 
         let price_res: Option<u128> = if price.is_some() {
+            assert!(
+                price.unwrap().0 < MAX_PRICE,
+                "Paras: price higher than {}",
+                MAX_PRICE
+            );
             Some(price.unwrap().0)
         } else {
             None
@@ -552,6 +558,11 @@ impl Contract {
         if price.is_none() {
             token_series.price = None;
         } else {
+            assert!(
+                price.unwrap().0 < MAX_PRICE,
+                "Paras: price higher than {}",
+                MAX_PRICE
+            );
             token_series.price = Some(price.unwrap().0);
         }
 
@@ -1409,6 +1420,28 @@ mod tests {
             token_from_nft_token.unwrap().owner_id,
             accounts(2).to_string()
         )
+    }
+
+    #[test]
+    #[should_panic( expected = "Paras: price higher than 999999999000000000000000000000000" )]
+    fn test_invalid_price_shouldnt_be_higher_than_max_price() {
+        let (mut context, mut contract) = setup_contract();
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
+            .build()
+        );
+
+        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
+        royalty.insert(accounts(1).to_string(), 1000);
+
+        create_series(&mut contract, &royalty, Some(U128::from(1_000_000_000 * 10u128.pow(24))), None);
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(1)
+            .build()
+        );
     }
 
     #[test]
