@@ -33,7 +33,7 @@ const GAS_FOR_NFT_TRANSFER_CALL: Gas = 30_000_000_000_000 + GAS_FOR_RESOLVE_TRAN
 const GAS_FOR_NFT_APPROVE: Gas = 10_000_000_000_000;
 const GAS_FOR_MINT: Gas = 90_000_000_000_000;
 const NO_DEPOSIT: Balance = 0;
-const MAX_PRICE: Balance = 999_999_999 * 10u128.pow(24);
+const MAX_PRICE: Balance = 1_000_000_000 * 10u128.pow(24);
 
 pub type TokenSeriesId = String;
 
@@ -1423,7 +1423,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic( expected = "Paras: price higher than 999999999000000000000000000000000" )]
+    #[should_panic( expected = "Paras: price higher than 1000000000000000000000000000000000" )]
     fn test_invalid_price_shouldnt_be_higher_than_max_price() {
         let (mut context, mut contract) = setup_contract();
         testing_env!(context
