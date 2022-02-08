@@ -11,7 +11,7 @@ use near_sdk::collections::{LazyOption, UnorderedMap, UnorderedSet};
 use near_sdk::json_types::{ValidAccountId, U128, U64};
 use near_sdk::{
     assert_one_yocto, env, near_bindgen, serde_json::json, AccountId, Balance, BorshStorageKey,
-    PanicOnDefault, Promise, PromiseOrValue, Gas, ext_contract
+    PanicOnDefault, Promise, PromiseOrValue, Gas, ext_contract, Timestamp
 };
 use near_sdk::serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -26,7 +26,6 @@ pub const TOKEN_DELIMETER: char = ':';
 pub const TITLE_DELIMETER: &str = " #";
 /// e.g. "Title — 2/10" where 10 is max copies
 pub const EDITION_DELIMETER: &str = "/";
-pub const TREASURY_FEE: u128 = 500; // 500 / 10_000 = 0.05
 
 const GAS_FOR_RESOLVE_TRANSFER: Gas = 10_000_000_000_000;
 const GAS_FOR_NFT_TRANSFER_CALL: Gas = 30_000_000_000_000 + GAS_FOR_RESOLVE_TRANSFER;
@@ -36,6 +35,7 @@ const NO_DEPOSIT: Balance = 0;
 const MAX_PRICE: Balance = 1_000_000_000 * 10u128.pow(24);
 
 pub type TokenSeriesId = String;
+pub type TimestampSec = u32;
 
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
@@ -96,7 +96,25 @@ pub struct TokenSeriesJson {
     royalty: HashMap<AccountId, u32>
 }
 
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct TransactionFee {
+    pub next_fee: Option<u16>,
+    pub start_time: Option<TimestampSec>,
+    pub current_fee: u16,
+}
+
+
 near_sdk::setup_alloc!();
+
+#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
+pub struct ContractV1 {
+    tokens: NonFungibleToken,
+    metadata: LazyOption<NFTContractMetadata>,
+    // CUSTOM
+	token_series_by_id: UnorderedMap<TokenSeriesId, TokenSeries>,
+    treasury_id: AccountId,
+}
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
@@ -104,8 +122,9 @@ pub struct Contract {
     tokens: NonFungibleToken,
     metadata: LazyOption<NFTContractMetadata>,
     // CUSTOM
-	token_series_by_id: UnorderedMap<TokenSeriesId, TokenSeries>,
+    token_series_by_id: UnorderedMap<TokenSeriesId, TokenSeries>,
     treasury_id: AccountId,
+    transaction_fee: TransactionFee
 }
 
 const DATA_IMAGE_SVG_PARAS_ICON: &str = "data:image/svg+xml,%3Csvg width='1080' height='1080' viewBox='0 0 1080 1080' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='1080' height='1080' rx='10' fill='%230000BA'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M335.238 896.881L240 184L642.381 255.288C659.486 259.781 675.323 263.392 689.906 266.718C744.744 279.224 781.843 287.684 801.905 323.725C827.302 369.032 840 424.795 840 491.014C840 557.55 827.302 613.471 801.905 658.779C776.508 704.087 723.333 726.74 642.381 726.74H468.095L501.429 896.881H335.238ZM387.619 331.329L604.777 369.407C614.008 371.807 622.555 373.736 630.426 375.513C660.02 382.193 680.042 386.712 690.869 405.963C704.575 430.164 711.428 459.95 711.428 495.321C711.428 530.861 704.575 560.731 690.869 584.932C677.163 609.133 648.466 621.234 604.777 621.234H505.578L445.798 616.481L387.619 331.329Z' fill='white'/%3E%3C/svg%3E";
@@ -139,6 +158,7 @@ impl Contract {
                 reference: None,
                 reference_hash: None,
             },
+            500,
         )
     }
 
@@ -146,7 +166,8 @@ impl Contract {
     pub fn new(
         owner_id: ValidAccountId, 
         treasury_id: ValidAccountId, 
-        metadata: NFTContractMetadata
+        metadata: NFTContractMetadata,
+        current_fee: u16,
     ) -> Self {
         assert!(!env::state_exists(), "Already initialized");
         metadata.assert_valid();
@@ -161,7 +182,82 @@ impl Contract {
             token_series_by_id: UnorderedMap::new(StorageKey::TokenSeriesById),
             metadata: LazyOption::new(StorageKey::Metadata, Some(&metadata)),
             treasury_id: treasury_id.to_string(),
+            transaction_fee: TransactionFee {
+                next_fee: None,
+                start_time: None,
+                current_fee
+            }
         }
+    }
+
+    #[init(ignore_state)]
+    pub fn migrate(current_fee: u16) -> Self {
+        let prev: ContractV1 = env::state_read().expect("ERR_NOT_INITIALIZED");
+        assert_eq!(
+            env::predecessor_account_id(),
+            prev.tokens.owner_id,
+            "Paras: Only owner"
+        );
+
+        let this = Contract {
+            tokens: prev.tokens,
+            metadata: prev.metadata,
+            token_series_by_id: prev.token_series_by_id,
+            treasury_id: prev.treasury_id,
+            transaction_fee: TransactionFee {
+                next_fee: None,
+                start_time: None,
+                current_fee
+            }
+        };
+
+        this
+    }
+
+    #[payable]
+    pub fn set_transaction_fee(&mut self, next_fee: u16, start_time: Option<TimestampSec>) {
+        assert_one_yocto();
+        assert_eq!(
+            env::predecessor_account_id(),
+            self.tokens.owner_id,
+            "Paras: Owner only"
+        );
+
+        assert!(
+            next_fee < 10_000,
+            "Paras: transaction fee is more than 10_000"
+        );
+
+        if start_time.is_none() {
+            self.transaction_fee.current_fee = next_fee;
+            self.transaction_fee.next_fee = None;
+            self.transaction_fee.start_time = None;
+            return
+        } else {
+            let start_time: TimestampSec = start_time.unwrap();
+            assert!(
+                start_time > to_sec(env::block_timestamp()),
+                "start_time is less than current block_timestamp"
+            );
+            self.transaction_fee.next_fee = Some(next_fee);
+            self.transaction_fee.start_time = Some(start_time);
+        }
+    }
+
+    pub fn calculate_current_transaction_fee(&mut self) -> u128 {
+        let transaction_fee: &TransactionFee = &self.transaction_fee;
+        if transaction_fee.next_fee.is_some() {
+            if to_sec(env::block_timestamp()) >= transaction_fee.start_time.unwrap() {
+                self.transaction_fee.current_fee = transaction_fee.next_fee.unwrap();
+                self.transaction_fee.next_fee = None;
+                self.transaction_fee.start_time = None;
+            }
+        }
+        self.transaction_fee.current_fee as u128
+    }
+
+    pub fn get_transaction_fee(&self) -> &TransactionFee {
+        &self.transaction_fee
     }
 
     // Treasury
@@ -295,10 +391,13 @@ impl Contract {
         );
         let token_id: TokenId = self._nft_mint_series(token_series_id, receiver_id.to_string());
 
-        let for_treasury = price as u128 * TREASURY_FEE / 10_000u128;
+        let for_treasury = price as u128 * self.calculate_current_transaction_fee() / 10_000u128;
         let price_deducted = price - for_treasury;
         Promise::new(token_series.creator_id).transfer(price_deducted);
-        Promise::new(self.treasury_id.clone()).transfer(for_treasury);
+
+        if for_treasury != 0 {
+            Promise::new(self.treasury_id.clone()).transfer(for_treasury);
+        }
 
         refund_deposit(env::storage_usage() - initial_storage_usage, price);
 
@@ -1070,6 +1169,10 @@ fn refund_deposit(storage_used: u64, extra_spend: Balance) {
     }
 }
 
+fn to_sec(timestamp: Timestamp) -> TimestampSec {
+    (timestamp / 10u64.pow(9)) as u32
+}
+
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
@@ -1111,7 +1214,8 @@ mod tests {
                 base_uri: Some("https://ipfs.fleek.co/ipfs/".to_string()),
                 reference: None,
                 reference_hash: None,
-            }
+            },
+            500
         );
         testing_env!(context.is_view(true).build());
         assert_eq!(contract.get_owner(), accounts(1).to_string());
@@ -1603,5 +1707,55 @@ mod tests {
             token.owner_id,
             accounts(3).to_string()
         )
+    }
+
+    #[test]
+    fn test_change_transaction_fee_immediately() {
+        let (mut context, mut contract) = setup_contract();
+
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(1)
+            .build()
+        );
+
+        contract.set_transaction_fee(100, None);
+
+        assert_eq!(contract.get_transaction_fee().current_fee, 100);
+    }
+
+    #[test]
+    fn test_change_transaction_fee_with_time() {
+        let (mut context, mut contract) = setup_contract();
+
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(1)
+            .build()
+        );
+
+        assert_eq!(contract.get_transaction_fee().current_fee, 500);
+        assert_eq!(contract.get_transaction_fee().next_fee, None);
+        assert_eq!(contract.get_transaction_fee().start_time, None);
+
+        let next_fee: u16 = 100;
+        let start_time: Timestamp = 1618109122863866400;
+        let start_time_sec: TimestampSec = to_sec(start_time);
+        contract.set_transaction_fee(next_fee, Some(start_time_sec));
+
+        assert_eq!(contract.get_transaction_fee().current_fee, 500);
+        assert_eq!(contract.get_transaction_fee().next_fee, Some(next_fee));
+        assert_eq!(contract.get_transaction_fee().start_time, Some(start_time_sec));
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .block_timestamp(start_time + 1)
+            .build()
+        );
+
+        contract.calculate_current_transaction_fee();
+        assert_eq!(contract.get_transaction_fee().current_fee, next_fee);
+        assert_eq!(contract.get_transaction_fee().next_fee, None);
+        assert_eq!(contract.get_transaction_fee().start_time, None);
     }
 }
