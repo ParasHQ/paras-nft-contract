@@ -257,3 +257,63 @@ fn simulate_buy() {
     assert_eq!(for_treasury, diff_after_sell_treasury);
     assert_eq!(for_seller, diff_after_sell_alice);
 }
+
+#[test]
+fn simulate_buy_change_transaction_fee() {
+    let (root, nft, treasury) = init();
+
+    let alice = root.create_user("alice".to_string(), to_yocto("100"));
+
+    let treasury_balance = treasury.account().unwrap().amount;
+
+    alice.call(
+        nft.account_id(),
+        "nft_create_series",
+        &json!({
+            "token_metadata": {
+                "title": "A".repeat(200),
+                "reference": "A".repeat(59),
+                "media": "A".repeat(59),
+                "copies": 100u64,
+            },
+            "price": to_yocto("1").to_string(),
+            "royalty": {
+                "0".repeat(64): 1000u32
+            },
+        }).to_string().into_bytes(),
+        DEFAULT_GAS,
+        to_yocto("1")
+    );
+
+    let alice_balance = alice.account().unwrap().amount;
+
+    root.call(
+        nft.account_id(),
+        "set_transaction_fee",
+        &json!({
+            "next_fee": 100
+        }).to_string().into_bytes(),
+        DEFAULT_GAS,
+        1
+    ).assert_success();
+
+    root.call(
+        nft.account_id(),
+        "nft_buy",
+        &json!({
+            "token_series_id": "1",
+            "receiver_id": root.account_id(),
+        }).to_string().into_bytes(),
+        DEFAULT_GAS,
+        to_yocto("1") + STORAGE_MINT_ESTIMATE
+    );
+
+    let for_treasury = (to_yocto("1") * 100) / 10_000;
+    let for_seller = to_yocto("1") - for_treasury;
+
+    let diff_after_sell_treasury = treasury.account().unwrap().amount - treasury_balance;
+    let diff_after_sell_alice = alice.account().unwrap().amount - alice_balance;
+
+    assert_eq!(for_treasury, diff_after_sell_treasury);
+    assert_eq!(for_seller, diff_after_sell_alice);
+}
