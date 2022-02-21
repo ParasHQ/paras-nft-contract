@@ -821,6 +821,7 @@ impl Contract {
         token_metadata.reference = series_metadata.reference;
         token_metadata.media = series_metadata.media;
         token_metadata.copies = series_metadata.copies;
+        token_metadata.extra = series_metadata.extra;
 
         Some(Token {
             token_id,
