@@ -27,8 +27,6 @@ pub const TITLE_DELIMETER: &str = " #";
 /// e.g. "Title — 2/10" where 10 is max copies
 pub const EDITION_DELIMETER: &str = "/";
 
-const DELIMETER: &str = "||";
-
 const GAS_FOR_RESOLVE_TRANSFER: Gas = 10_000_000_000_000;
 const GAS_FOR_NFT_TRANSFER_CALL: Gas = 30_000_000_000_000 + GAS_FOR_RESOLVE_TRANSFER;
 const GAS_FOR_NFT_APPROVE: Gas = 10_000_000_000_000;
@@ -107,7 +105,6 @@ pub struct TransactionFee {
     pub current_fee: u16,
 }
 
-#[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct MarketDataTransactionFee {
     pub transaction_fee: UnorderedMap<TokenSeriesId, u128>
