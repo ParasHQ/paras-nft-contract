@@ -94,7 +94,8 @@ pub struct TokenSeriesJson {
     token_series_id: TokenSeriesId,
 	metadata: TokenMetadata,
 	creator_id: AccountId,
-    royalty: HashMap<AccountId, u32>
+    royalty: HashMap<AccountId, u32>,
+    transaction_fee: Option<U128>
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
@@ -284,7 +285,7 @@ impl Contract {
         &self.transaction_fee
     }
 
-    pub fn get_market_data_transaction_fee (self, token_series_id: &TokenId) -> u128{
+    pub fn get_market_data_transaction_fee (&self, token_series_id: &TokenId) -> u128{
         if let Some(transaction_fee) = self.market_data_transaction_fee.transaction_fee.get(&token_series_id){
             return transaction_fee;
         }
@@ -397,12 +398,14 @@ impl Contract {
         );
 
         refund_deposit(env::storage_usage() - initial_storage_usage, 0);
+        let current_transaction_fee = self.get_market_data_transaction_fee(&token_series_id);
 
 		TokenSeriesJson{
             token_series_id,
 			metadata: token_metadata,
 			creator_id: caller_id.into(),
             royalty: royalty_res,
+            transaction_fee: Some(current_transaction_fee.into()) 
 		}
     }
 
@@ -710,7 +713,7 @@ impl Contract {
                 "params": {
                     "token_series_id": token_series_id,
                     "price": price,
-                    "transaction_fee": current_transaction_fee
+                    "transaction_fee": current_transaction_fee.to_string()
                 }
             })
             .to_string()
@@ -762,11 +765,13 @@ impl Contract {
 
 	pub fn nft_get_series_single(&self, token_series_id: TokenSeriesId) -> TokenSeriesJson {
 		let token_series = self.token_series_by_id.get(&token_series_id).expect("Series does not exist");
+        let current_transaction_fee = self.get_market_data_transaction_fee(&token_series_id);
 		TokenSeriesJson{
             token_series_id,
 			metadata: token_series.metadata,
 			creator_id: token_series.creator_id,
             royalty: token_series.royalty,
+            transaction_fee: Some(current_transaction_fee.into()) 
 		}
 	}
 
@@ -804,6 +809,7 @@ impl Contract {
                 metadata: token_series.metadata,
                 creator_id: token_series.creator_id,
                 royalty: token_series.royalty,
+                transaction_fee: None 
             })
             .collect()
     }
@@ -1797,5 +1803,64 @@ mod tests {
         assert_eq!(contract.get_transaction_fee().current_fee, next_fee);
         assert_eq!(contract.get_transaction_fee().next_fee, None);
         assert_eq!(contract.get_transaction_fee().start_time, None);
+    }
+
+    #[test]
+    fn test_transaction_fee_locked() {
+        let (mut context, mut contract) = setup_contract();
+
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(1)
+            .build()
+        );
+
+        assert_eq!(contract.get_transaction_fee().current_fee, 500);
+        assert_eq!(contract.get_transaction_fee().next_fee, None);
+        assert_eq!(contract.get_transaction_fee().start_time, None);
+
+        let next_fee: u16 = 100;
+        let start_time: Timestamp = 1618109122863866400;
+        let start_time_sec: TimestampSec = to_sec(start_time);
+        contract.set_transaction_fee(next_fee, Some(start_time_sec));
+
+        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
+        royalty.insert(accounts(1).to_string(), 1000);
+
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
+            .build()
+        );
+
+        create_series(&mut contract, &royalty, Some(U128::from(1 * 10u128.pow(24))), None);
+
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(1)
+            .build()
+        );
+
+        contract.nft_set_series_price("1".to_string(), None);
+
+        assert_eq!(contract.get_transaction_fee().current_fee, 500);
+        assert_eq!(contract.get_transaction_fee().next_fee, Some(next_fee));
+        assert_eq!(contract.get_transaction_fee().start_time, Some(start_time_sec));
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .block_timestamp(start_time + 1)
+            .attached_deposit(1)
+            .build()
+        );
+
+        contract.calculate_current_transaction_fee();
+        assert_eq!(contract.get_transaction_fee().current_fee, next_fee);
+        assert_eq!(contract.get_transaction_fee().next_fee, None);
+        assert_eq!(contract.get_transaction_fee().start_time, None);
+
+        let series = contract.nft_get_series_single("1".to_string());
+        let series_transaction_fee: u128 = series.transaction_fee.unwrap().into();
+        assert_eq!(series_transaction_fee, 500);
     }
 }
