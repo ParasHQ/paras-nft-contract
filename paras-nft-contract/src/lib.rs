@@ -394,7 +394,9 @@ impl Contract {
         );
 
         refund_deposit(env::storage_usage() - initial_storage_usage, 0);
-        let current_transaction_fee = self.get_market_data_transaction_fee(&token_series_id);
+        // set market data transaction fee
+        let current_transaction_fee = self.calculate_current_transaction_fee();
+        self.market_data_transaction_fee.transaction_fee.insert(&token_series_id, &current_transaction_fee);
 
 		TokenSeriesJson{
             token_series_id,
