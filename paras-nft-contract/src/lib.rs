@@ -203,7 +203,7 @@ impl Contract {
     }
 
     #[init(ignore_state)]
-    pub fn migrate(current_fee: u16) -> Self {
+    pub fn migrate() -> Self {
         let prev: ContractV1 = env::state_read().expect("ERR_NOT_INITIALIZED");
         assert_eq!(
             env::predecessor_account_id(),
@@ -216,11 +216,7 @@ impl Contract {
             metadata: prev.metadata,
             token_series_by_id: prev.token_series_by_id,
             treasury_id: prev.treasury_id,
-            transaction_fee: TransactionFee {
-                next_fee: None,
-                start_time: None,
-                current_fee
-            },
+            transaction_fee: prev.transaction_fee,
             market_data_transaction_fee: MarketDataTransactionFee{
                 transaction_fee: UnorderedMap::new(StorageKey::MarketDataTransactionFee)
             },
