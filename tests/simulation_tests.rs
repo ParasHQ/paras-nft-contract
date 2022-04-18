@@ -308,7 +308,8 @@ fn simulate_buy_change_transaction_fee() {
         to_yocto("1") + STORAGE_MINT_ESTIMATE
     );
 
-    let for_treasury = (to_yocto("1") * 100) / 10_000;
+    // the transaction fee still 500 (locked transaction fee)
+    let for_treasury = (to_yocto("1") * 500) / 10_000;
     let for_seller = to_yocto("1") - for_treasury;
 
     let diff_after_sell_treasury = treasury.account().unwrap().amount - treasury_balance;

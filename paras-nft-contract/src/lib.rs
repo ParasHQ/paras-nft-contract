@@ -36,6 +36,7 @@ const MAX_PRICE: Balance = 1_000_000_000 * 10u128.pow(24);
 
 pub type TokenSeriesId = String;
 pub type TimestampSec = u32;
+pub type ContractAndTokenId = String;
 
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
@@ -93,7 +94,8 @@ pub struct TokenSeriesJson {
     token_series_id: TokenSeriesId,
 	metadata: TokenMetadata,
 	creator_id: AccountId,
-    royalty: HashMap<AccountId, u32>
+    royalty: HashMap<AccountId, u32>,
+    transaction_fee: Option<U128>
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
@@ -104,6 +106,10 @@ pub struct TransactionFee {
     pub current_fee: u16,
 }
 
+#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
+pub struct MarketDataTransactionFee {
+    pub transaction_fee: UnorderedMap<TokenSeriesId, u128>
+}
 
 near_sdk::setup_alloc!();
 
@@ -114,6 +120,7 @@ pub struct ContractV1 {
     // CUSTOM
 	token_series_by_id: UnorderedMap<TokenSeriesId, TokenSeries>,
     treasury_id: AccountId,
+    transaction_fee: TransactionFee
 }
 
 #[near_bindgen]
@@ -124,7 +131,8 @@ pub struct Contract {
     // CUSTOM
     token_series_by_id: UnorderedMap<TokenSeriesId, TokenSeries>,
     treasury_id: AccountId,
-    transaction_fee: TransactionFee
+    transaction_fee: TransactionFee,
+    market_data_transaction_fee: MarketDataTransactionFee
 }
 
 const DATA_IMAGE_SVG_PARAS_ICON: &str = "data:image/svg+xml,%3Csvg width='1080' height='1080' viewBox='0 0 1080 1080' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='1080' height='1080' rx='10' fill='%230000BA'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M335.238 896.881L240 184L642.381 255.288C659.486 259.781 675.323 263.392 689.906 266.718C744.744 279.224 781.843 287.684 801.905 323.725C827.302 369.032 840 424.795 840 491.014C840 557.55 827.302 613.471 801.905 658.779C776.508 704.087 723.333 726.74 642.381 726.74H468.095L501.429 896.881H335.238ZM387.619 331.329L604.777 369.407C614.008 371.807 622.555 373.736 630.426 375.513C660.02 382.193 680.042 386.712 690.869 405.963C704.575 430.164 711.428 459.95 711.428 495.321C711.428 530.861 704.575 560.731 690.869 584.932C677.163 609.133 648.466 621.234 604.777 621.234H505.578L445.798 616.481L387.619 331.329Z' fill='white'/%3E%3C/svg%3E";
@@ -140,6 +148,7 @@ enum StorageKey {
     TokenSeriesById,
     TokensBySeriesInner { token_series: String },
     TokensPerOwner { account_hash: Vec<u8> },
+    MarketDataTransactionFee,
 }
 
 #[near_bindgen]
@@ -186,12 +195,15 @@ impl Contract {
                 next_fee: None,
                 start_time: None,
                 current_fee
-            }
+            },
+            market_data_transaction_fee: MarketDataTransactionFee{
+                transaction_fee: UnorderedMap::new(StorageKey::MarketDataTransactionFee)
+            },
         }
     }
 
     #[init(ignore_state)]
-    pub fn migrate(current_fee: u16) -> Self {
+    pub fn migrate() -> Self {
         let prev: ContractV1 = env::state_read().expect("ERR_NOT_INITIALIZED");
         assert_eq!(
             env::predecessor_account_id(),
@@ -204,11 +216,10 @@ impl Contract {
             metadata: prev.metadata,
             token_series_by_id: prev.token_series_by_id,
             treasury_id: prev.treasury_id,
-            transaction_fee: TransactionFee {
-                next_fee: None,
-                start_time: None,
-                current_fee
-            }
+            transaction_fee: prev.transaction_fee,
+            market_data_transaction_fee: MarketDataTransactionFee{
+                transaction_fee: UnorderedMap::new(StorageKey::MarketDataTransactionFee)
+            },
         };
 
         this
@@ -244,6 +255,16 @@ impl Contract {
         }
     }
 
+    pub fn calculate_market_data_transaction_fee(&mut self, token_series_id: &TokenSeriesId) -> u128{
+        if let Some(transaction_fee) = self.market_data_transaction_fee.transaction_fee.get(&token_series_id){
+            return transaction_fee;
+        }
+
+        // fallback to default transaction fee
+        self.calculate_current_transaction_fee()
+    }
+
+
     pub fn calculate_current_transaction_fee(&mut self) -> u128 {
         let transaction_fee: &TransactionFee = &self.transaction_fee;
         if transaction_fee.next_fee.is_some() {
@@ -259,6 +280,15 @@ impl Contract {
     pub fn get_transaction_fee(&self) -> &TransactionFee {
         &self.transaction_fee
     }
+
+    pub fn get_market_data_transaction_fee (&self, token_series_id: &TokenId) -> u128{
+        if let Some(transaction_fee) = self.market_data_transaction_fee.transaction_fee.get(&token_series_id){
+            return transaction_fee;
+        }
+        // fallback to default transaction fee
+        self.transaction_fee.current_fee as u128
+    }
+
 
     // Treasury
     #[payable]
@@ -364,12 +394,16 @@ impl Contract {
         );
 
         refund_deposit(env::storage_usage() - initial_storage_usage, 0);
+        // set market data transaction fee
+        let current_transaction_fee = self.calculate_current_transaction_fee();
+        self.market_data_transaction_fee.transaction_fee.insert(&token_series_id, &current_transaction_fee);
 
 		TokenSeriesJson{
             token_series_id,
 			metadata: token_metadata,
 			creator_id: caller_id.into(),
             royalty: royalty_res,
+            transaction_fee: Some(current_transaction_fee.into()) 
 		}
     }
 
@@ -389,9 +423,9 @@ impl Contract {
             "Paras: attached deposit is less than price : {}",
             price
         );
-        let token_id: TokenId = self._nft_mint_series(token_series_id, receiver_id.to_string());
+        let token_id: TokenId = self._nft_mint_series(token_series_id.clone(), receiver_id.to_string());
 
-        let for_treasury = price as u128 * self.calculate_current_transaction_fee() / 10_000u128;
+        let for_treasury = price as u128 * self.calculate_market_data_transaction_fee(&token_series_id) / 10_000u128;
         let price_deducted = price - for_treasury;
         Promise::new(token_series.creator_id).transfer(price_deducted);
 
@@ -666,12 +700,18 @@ impl Contract {
         }
 
         self.token_series_by_id.insert(&token_series_id, &token_series);
+
+        // set market data transaction fee
+        let current_transaction_fee = self.calculate_current_transaction_fee();
+        self.market_data_transaction_fee.transaction_fee.insert(&token_series_id, &current_transaction_fee);
+
         env::log(
             json!({
                 "type": "nft_set_series_price",
                 "params": {
                     "token_series_id": token_series_id,
-                    "price": price
+                    "price": price,
+                    "transaction_fee": current_transaction_fee.to_string()
                 }
             })
             .to_string()
@@ -723,11 +763,13 @@ impl Contract {
 
 	pub fn nft_get_series_single(&self, token_series_id: TokenSeriesId) -> TokenSeriesJson {
 		let token_series = self.token_series_by_id.get(&token_series_id).expect("Series does not exist");
+        let current_transaction_fee = self.get_market_data_transaction_fee(&token_series_id);
 		TokenSeriesJson{
             token_series_id,
 			metadata: token_series.metadata,
 			creator_id: token_series.creator_id,
             royalty: token_series.royalty,
+            transaction_fee: Some(current_transaction_fee.into()) 
 		}
 	}
 
@@ -765,6 +807,7 @@ impl Contract {
                 metadata: token_series.metadata,
                 creator_id: token_series.creator_id,
                 royalty: token_series.royalty,
+                transaction_fee: None 
             })
             .collect()
     }
@@ -821,6 +864,7 @@ impl Contract {
         token_metadata.reference = series_metadata.reference;
         token_metadata.media = series_metadata.media;
         token_metadata.copies = series_metadata.copies;
+        token_metadata.extra = series_metadata.extra;
 
         Some(Token {
             token_id,
@@ -1757,5 +1801,64 @@ mod tests {
         assert_eq!(contract.get_transaction_fee().current_fee, next_fee);
         assert_eq!(contract.get_transaction_fee().next_fee, None);
         assert_eq!(contract.get_transaction_fee().start_time, None);
+    }
+
+    #[test]
+    fn test_transaction_fee_locked() {
+        let (mut context, mut contract) = setup_contract();
+
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(1)
+            .build()
+        );
+
+        assert_eq!(contract.get_transaction_fee().current_fee, 500);
+        assert_eq!(contract.get_transaction_fee().next_fee, None);
+        assert_eq!(contract.get_transaction_fee().start_time, None);
+
+        let next_fee: u16 = 100;
+        let start_time: Timestamp = 1618109122863866400;
+        let start_time_sec: TimestampSec = to_sec(start_time);
+        contract.set_transaction_fee(next_fee, Some(start_time_sec));
+
+        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
+        royalty.insert(accounts(1).to_string(), 1000);
+
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
+            .build()
+        );
+
+        create_series(&mut contract, &royalty, Some(U128::from(1 * 10u128.pow(24))), None);
+
+        testing_env!(context
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(1)
+            .build()
+        );
+
+        contract.nft_set_series_price("1".to_string(), None);
+
+        assert_eq!(contract.get_transaction_fee().current_fee, 500);
+        assert_eq!(contract.get_transaction_fee().next_fee, Some(next_fee));
+        assert_eq!(contract.get_transaction_fee().start_time, Some(start_time_sec));
+
+        testing_env!(context
+            .predecessor_account_id(accounts(1))
+            .block_timestamp(start_time + 1)
+            .attached_deposit(1)
+            .build()
+        );
+
+        contract.calculate_current_transaction_fee();
+        assert_eq!(contract.get_transaction_fee().current_fee, next_fee);
+        assert_eq!(contract.get_transaction_fee().next_fee, None);
+        assert_eq!(contract.get_transaction_fee().start_time, None);
+
+        let series = contract.nft_get_series_single("1".to_string());
+        let series_transaction_fee: u128 = series.transaction_fee.unwrap().into();
+        assert_eq!(series_transaction_fee, 500);
     }
 }
