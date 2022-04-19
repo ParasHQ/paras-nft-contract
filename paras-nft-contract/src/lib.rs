@@ -378,6 +378,10 @@ impl Contract {
             royalty: royalty_res.clone(),
         });
 
+        // set market data transaction fee
+        let current_transaction_fee = self.calculate_current_transaction_fee();
+        self.market_data_transaction_fee.transaction_fee.insert(&token_series_id, &current_transaction_fee);
+
         env::log(
             json!({
                 "type": "nft_create_series",
@@ -386,7 +390,8 @@ impl Contract {
                     "token_metadata": token_metadata,
                     "creator_id": caller_id,
                     "price": price,
-                    "royalty": royalty_res
+                    "royalty": royalty_res,
+                    "transaction_fee": &current_transaction_fee.to_string()
                 }
             })
             .to_string()
@@ -394,9 +399,6 @@ impl Contract {
         );
 
         refund_deposit(env::storage_usage() - initial_storage_usage, 0);
-        // set market data transaction fee
-        let current_transaction_fee = self.calculate_current_transaction_fee();
-        self.market_data_transaction_fee.transaction_fee.insert(&token_series_id, &current_transaction_fee);
 
 		TokenSeriesJson{
             token_series_id,
