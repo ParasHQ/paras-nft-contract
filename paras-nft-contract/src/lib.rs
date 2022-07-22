@@ -416,10 +416,9 @@ impl Contract {
         receiver_id: ValidAccountId
     ) -> TokenId {
         let initial_storage_usage = env::storage_usage();
-
+        let attached_deposit = env::attached_deposit();
         let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
         let price: u128 = token_series.price.expect("Paras: not for sale");
-        let attached_deposit = env::attached_deposit();
         assert!(
             attached_deposit >= price,
             "Paras: attached deposit is less than price : {}",
@@ -540,6 +539,7 @@ impl Contract {
 
         if (num_tokens + 1) >= max_copies {
             token_series.is_mintable = false;
+            token_series.price = None;
         }
 
         let token_id = format!("{}{}{}", &token_series_id, TOKEN_DELIMETER, num_tokens + 1);
