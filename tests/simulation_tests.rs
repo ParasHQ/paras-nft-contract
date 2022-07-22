@@ -11,7 +11,7 @@ near_sdk_sim::lazy_static_include::lazy_static_include_bytes! {
 }
 
 // Added after running simulation test -> with max token series id and 64 byte account
-pub const STORAGE_MINT_ESTIMATE: u128 = 18280000000000000000000;
+pub const STORAGE_MINT_ESTIMATE: u128 = 11280000000000000000000;
 pub const STORAGE_CREATE_SERIES_ESTIMATE: u128 = 8540000000000000000000;
 pub const STORAGE_APPROVE: u128 = 2610000000000000000000;
 
