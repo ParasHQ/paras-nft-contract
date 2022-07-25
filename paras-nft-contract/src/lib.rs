@@ -344,7 +344,7 @@ impl Contract {
             HashMap::new()
         };
 
-        assert!(total_accounts <= 10, "Paras: royalty exceeds 10 accounts");
+        assert!(total_accounts <= 50, "Paras: royalty exceeds 50 accounts");
 
         assert!(
             total_perpetual <= 9000,
