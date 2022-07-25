@@ -178,7 +178,6 @@ impl Contract {
         metadata: NFTContractMetadata,
         current_fee: u16,
     ) -> Self {
-        assert!(!env::state_exists(), "Already initialized");
         metadata.assert_valid();
         Self {
             tokens: NonFungibleToken::new(
@@ -412,14 +411,13 @@ impl Contract {
     #[payable]
     pub fn nft_buy(
         &mut self, 
-        token_series_id: TokenSeriesId, 
-        receiver_id: ValidAccountId
+        token_series_id: TokenSeriesId
     ) -> TokenId {
         let initial_storage_usage = env::storage_usage();
-
+        let attached_deposit = env::attached_deposit();
+        let receiver_id = env::predecessor_account_id();
         let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
         let price: u128 = token_series.price.expect("Paras: not for sale");
-        let attached_deposit = env::attached_deposit();
         assert!(
             attached_deposit >= price,
             "Paras: attached deposit is less than price : {}",
@@ -449,7 +447,7 @@ impl Contract {
     #[payable]
     pub fn nft_mint(
         &mut self, 
-        token_series_id: TokenSeriesId, 
+        token_series_id: TokenSeriesId,
         receiver_id: ValidAccountId
     ) -> TokenId {
         let initial_storage_usage = env::storage_usage();
@@ -525,7 +523,7 @@ impl Contract {
 
     fn _nft_mint_series(
         &mut self, 
-        token_series_id: TokenSeriesId, 
+        token_series_id: TokenSeriesId,
         receiver_id: AccountId
     ) -> TokenId {
         let mut token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
@@ -540,6 +538,7 @@ impl Contract {
 
         if (num_tokens + 1) >= max_copies {
             token_series.is_mintable = false;
+            token_series.price = None;
         }
 
         let token_id = format!("{}{}{}", &token_series_id, TOKEN_DELIMETER, num_tokens + 1);
@@ -588,42 +587,7 @@ impl Contract {
         token_id
     }
 
-    #[payable]
-    pub fn nft_set_series_non_mintable(&mut self, token_series_id: TokenSeriesId) {
-        assert_one_yocto();
 
-        let mut token_series = self.token_series_by_id.get(&token_series_id).expect("Token series not exist");
-        assert_eq!(
-            env::predecessor_account_id(),
-            token_series.creator_id,
-            "Paras: Creator only"
-        );
-
-        assert_eq!(
-            token_series.is_mintable,
-            true,
-            "Paras: already non-mintable"
-        );
-
-        assert_eq!(
-            token_series.metadata.copies,
-            None,
-            "Paras: decrease supply if copies not null"
-        );
-
-        token_series.is_mintable = false;
-        self.token_series_by_id.insert(&token_series_id, &token_series);
-        env::log(
-            json!({
-                "type": "nft_set_series_non_mintable",
-                "params": {
-                    "token_series_id": token_series_id,
-                }
-            })
-            .to_string()
-            .as_bytes(),
-        );
-    }
 
     #[payable]
     pub fn nft_decrease_series_copies(
@@ -874,34 +838,6 @@ impl Contract {
             metadata: Some(token_metadata),
             approved_account_ids,
         })
-    }
-
-    // CUSTOM core standard repeated here because no macro below
-
-    pub fn nft_transfer_unsafe(
-        &mut self,
-        receiver_id: ValidAccountId,
-        token_id: TokenId,
-        approval_id: Option<u64>,
-        memo: Option<String>,
-    ) {
-        let sender_id = env::predecessor_account_id();
-        let receiver_id_str = receiver_id.to_string();
-        let (previous_owner_id, _) = self.tokens.internal_transfer(&sender_id, &receiver_id_str, &token_id, approval_id, memo.clone());
-
-        let authorized_id : Option<AccountId> = if sender_id != previous_owner_id {
-            Some(sender_id)
-        } else {
-            None
-        };
-
-        NearEvent::log_nft_transfer(
-            previous_owner_id,
-            receiver_id_str,
-            vec![token_id],
-            memo,
-            authorized_id,
-        );
     }
 
     #[payable]
@@ -1375,7 +1311,7 @@ mod tests {
             .build()
         );
 
-        let token_id = contract.nft_buy("1".to_string(), accounts(2));
+        let token_id = contract.nft_buy("1".to_string());
 
         let token_from_nft_token = contract.nft_token(token_id);
         assert_eq!(
@@ -1411,37 +1347,6 @@ mod tests {
             token_from_nft_token.unwrap().owner_id,
             accounts(2).to_string()
         )
-    }
-
-    #[test]
-    #[should_panic(expected = "Paras: Token series is not mintable")]
-    fn test_invalid_mint_non_mintable() {
-        let (mut context, mut contract) = setup_contract();
-        testing_env!(context
-            .predecessor_account_id(accounts(1))
-            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
-            .build()
-        );
-
-        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
-        royalty.insert(accounts(1).to_string(), 1000);
-
-        create_series(&mut contract, &royalty, None, None);
-
-        testing_env!(context
-            .predecessor_account_id(accounts(1))
-            .attached_deposit(1)
-            .build()
-        );
-        contract.nft_set_series_non_mintable("1".to_string());
-
-        testing_env!(context
-            .predecessor_account_id(accounts(1))
-            .attached_deposit(STORAGE_FOR_MINT)
-            .build()
-        );
-
-        contract.nft_mint("1".to_string(), accounts(2));
     }
 
     #[test]
@@ -1563,7 +1468,7 @@ mod tests {
             .build()
         );
 
-        let token_id = contract.nft_buy("1".to_string(), accounts(2));
+        let token_id = contract.nft_buy("1".to_string());
 
         let token_from_nft_token = contract.nft_token(token_id);
         assert_eq!(
@@ -1656,42 +1561,6 @@ mod tests {
         );
 
         contract.nft_transfer(accounts(3), token_id.clone(), None, None);
-
-        let token = contract.nft_token(token_id).unwrap();
-        assert_eq!(
-            token.owner_id,
-            accounts(3).to_string()
-        )
-    }
-
-    #[test]
-    fn test_nft_transfer_unsafe() {
-        let (mut context, mut contract) = setup_contract();
-        testing_env!(context
-            .predecessor_account_id(accounts(1))
-            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
-            .build()
-        );
-
-        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
-        royalty.insert(accounts(1).to_string(), 1000);
-
-        create_series(&mut contract, &royalty, None, None);
-
-        testing_env!(context
-            .predecessor_account_id(accounts(1))
-            .attached_deposit(STORAGE_FOR_MINT)
-            .build()
-        );
-
-        let token_id = contract.nft_mint("1".to_string(), accounts(2));
-
-        testing_env!(context
-            .predecessor_account_id(accounts(2))
-            .build()
-        );
-
-        contract.nft_transfer_unsafe(accounts(3), token_id.clone(), None, None);
 
         let token = contract.nft_token(token_id).unwrap();
         assert_eq!(
