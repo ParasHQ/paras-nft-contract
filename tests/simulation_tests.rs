@@ -28,7 +28,7 @@ pub fn init() -> (UserAccount, UserAccount, UserAccount, UserAccount) {
 
 
     let owner=root.create_user(
-        "owner".to_string(),
+        "h".repeat(64),
         to_yocto("100"),
     );
 
@@ -247,7 +247,7 @@ fn simulate_buy() {
             "creator_id": alice.account_id(),
             "price": to_yocto("1").to_string(),
             "royalty": {
-                alice.account_id() : 1000u32
+                owner.account_id() : 1000u32
             },
         }).to_string().into_bytes(),
         DEFAULT_GAS,
@@ -302,11 +302,11 @@ fn simulate_buy_change_transaction_fee() {
             "creator_id": alice.account_id(),
             "price": to_yocto("1").to_string(),
             "royalty": {
-                alice.account_id() : 1000u32
+                owner.account_id() : 1000u32
             },
         }).to_string().into_bytes(),
         DEFAULT_GAS,
-        STORAGE_MINT_ESTIMATE*2
+        STORAGE_CREATE_SERIES_ESTIMATE
     ).assert_success();
 
     let alice_balance = alice.account().unwrap().amount;

@@ -415,6 +415,7 @@ impl Contract {
     ) -> TokenId {
         let initial_storage_usage = env::storage_usage();
         let attached_deposit = env::attached_deposit();
+        let receiver_id = env::predecessor_account_id();
         let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
         let price: u128 = token_series.price.expect("Paras: not for sale");
         assert!(
@@ -422,7 +423,7 @@ impl Contract {
             "Paras: attached deposit is less than price : {}",
             price
         );
-        let token_id: TokenId = self._nft_mint_series(token_series_id.clone(), env::predecessor_account_id().to_string());
+        let token_id: TokenId = self._nft_mint_series(token_series_id.clone(), receiver_id.to_string());
 
         let for_treasury = price as u128 * self.calculate_market_data_transaction_fee(&token_series_id) / 10_000u128;
         let price_deducted = price - for_treasury;
@@ -435,7 +436,7 @@ impl Contract {
         refund_deposit(env::storage_usage() - initial_storage_usage, price);
 
         NearEvent::log_nft_mint(
-            env::predecessor_account_id().to_string(),
+            receiver_id.to_string(),
             vec![token_id.clone()],
             Some(json!({"price": price.to_string()}).to_string())
         );
