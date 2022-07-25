@@ -1351,37 +1351,6 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "Paras: Token series is not mintable")]
-    fn test_invalid_mint_non_mintable() {
-        let (mut context, mut contract) = setup_contract();
-        testing_env!(context
-            .predecessor_account_id(accounts(1))
-            .attached_deposit(STORAGE_FOR_CREATE_SERIES)
-            .build()
-        );
-
-        let mut royalty: HashMap<AccountId, u32> = HashMap::new();
-        royalty.insert(accounts(1).to_string(), 1000);
-
-        create_series(&mut contract, &royalty, None, None);
-
-        testing_env!(context
-            .predecessor_account_id(accounts(1))
-            .attached_deposit(1)
-            .build()
-        );
-        contract.nft_set_series_non_mintable("1".to_string());
-
-        testing_env!(context
-            .predecessor_account_id(accounts(1))
-            .attached_deposit(STORAGE_FOR_MINT)
-            .build()
-        );
-
-        contract.nft_mint("1".to_string(), accounts(2));
-    }
-
-    #[test]
-    #[should_panic(expected = "Paras: Token series is not mintable")]
     fn test_invalid_mint_above_copies() {
         let (mut context, mut contract) = setup_contract();
         testing_env!(context
