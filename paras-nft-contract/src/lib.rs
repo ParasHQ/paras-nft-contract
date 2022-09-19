@@ -95,7 +95,7 @@ pub struct TokenSeriesJson {
 	metadata: TokenMetadata,
 	creator_id: AccountId,
     royalty: HashMap<AccountId, u32>,
-    transaction_fee: Option<U128>
+    transaction_fee: U128
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
@@ -404,7 +404,7 @@ impl Contract {
 			metadata: token_metadata,
 			creator_id: caller_id.into(),
             royalty: royalty_res,
-            transaction_fee: Some(current_transaction_fee.into()) 
+            transaction_fee: current_transaction_fee.into()
 		}
     }
 
@@ -735,7 +735,7 @@ impl Contract {
 			metadata: token_series.metadata,
 			creator_id: token_series.creator_id,
             royalty: token_series.royalty,
-            transaction_fee: Some(current_transaction_fee.into()) 
+            transaction_fee: current_transaction_fee.into() 
 		}
 	}
 
@@ -768,12 +768,16 @@ impl Contract {
             .iter()
             .skip(start_index as usize)
             .take(limit)
-            .map(|(token_series_id, token_series)| TokenSeriesJson{
-                token_series_id,
-                metadata: token_series.metadata,
-                creator_id: token_series.creator_id,
-                royalty: token_series.royalty,
-                transaction_fee: None 
+            .map(|(token_series_id, token_series)| 
+                 {
+                    let current_transaction_fee = self.get_market_data_transaction_fee(&token_series_id);
+                    return TokenSeriesJson{
+                        token_series_id,
+                        metadata: token_series.metadata,
+                        creator_id: token_series.creator_id,
+                        royalty: token_series.royalty,
+                        transaction_fee: current_transaction_fee.into()
+                }
             })
             .collect()
     }
