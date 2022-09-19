@@ -707,7 +707,13 @@ impl Contract {
         if let Some(tokens_per_owner) = &mut self.tokens.tokens_per_owner {
             let mut token_ids = tokens_per_owner.get(&owner_id).unwrap();
             token_ids.remove(&token_id);
-            tokens_per_owner.insert(&owner_id, &token_ids);
+
+            // remove the owner if there are no more tokens
+            if token_ids.is_empty() {
+                tokens_per_owner.remove(&owner_id);
+            } else {
+                tokens_per_owner.insert(&owner_id, &token_ids);
+            }
         }
 
         if let Some(token_metadata_by_id) = &mut self.tokens.token_metadata_by_id {
