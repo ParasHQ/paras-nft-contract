@@ -254,7 +254,7 @@ impl Contract {
         }
     }
 
-    pub fn calculate_market_data_transaction_fee(&mut self, token_series_id: &TokenSeriesId) -> u128{
+    pub fn calculate_new_market_data_transaction_fee(&mut self, token_series_id: &TokenSeriesId) -> u128{
         if let Some(transaction_fee) = self.market_data_transaction_fee.transaction_fee.get(&token_series_id){
             return transaction_fee;
         }
@@ -424,7 +424,7 @@ impl Contract {
         );
         let token_id: TokenId = self._nft_mint_series(token_series_id.clone(), receiver_id.to_string());
 
-        let for_treasury = price as u128 * self.calculate_market_data_transaction_fee(&token_series_id) / 10_000u128;
+        let for_treasury = price as u128 * self.calculate_new_market_data_transaction_fee(&token_series_id) / 10_000u128;
         let price_deducted = price - for_treasury;
         Promise::new(token_series.creator_id).transfer(price_deducted);
 
