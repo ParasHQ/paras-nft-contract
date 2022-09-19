@@ -259,7 +259,6 @@ impl Contract {
             return transaction_fee;
         }
 
-        // fallback to default transaction fee
         self.calculate_current_transaction_fee()
     }
 
