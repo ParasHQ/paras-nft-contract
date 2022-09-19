@@ -306,17 +306,12 @@ impl Contract {
     #[payable]
     pub fn nft_create_series(
         &mut self,
-        creator_id: Option<ValidAccountId>,
         token_metadata: TokenMetadata,
         price: Option<U128>,
         royalty: Option<HashMap<AccountId, u32>>,
     ) -> TokenSeriesJson {
         let initial_storage_usage = env::storage_usage();
         let caller_id = env::predecessor_account_id();
-
-        if creator_id.is_some() {
-            assert_eq!(creator_id.unwrap().to_string(), caller_id, "Paras: Caller is not creator_id");
-        }
 
         let token_series_id = format!("{}", (self.token_series_by_id.len() + 1));
 
@@ -399,13 +394,13 @@ impl Contract {
 
         refund_deposit(env::storage_usage() - initial_storage_usage, 0);
 
-		TokenSeriesJson{
-            token_series_id,
-			metadata: token_metadata,
-			creator_id: caller_id.into(),
-            royalty: royalty_res,
-            transaction_fee: Some(current_transaction_fee.into()) 
-		}
+        TokenSeriesJson{
+          token_series_id,
+          metadata: token_metadata,
+          creator_id: caller_id.into(),
+          royalty: royalty_res,
+          transaction_fee: Some(current_transaction_fee.into())
+        }
     }
 
     #[payable]
@@ -1225,7 +1220,6 @@ mod tests {
         copies: Option<u64>,
     ) {
         contract.nft_create_series(
-            None,
             TokenMetadata {
                 title: Some("Tsundere land".to_string()),
                 description: None,
