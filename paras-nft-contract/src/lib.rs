@@ -614,6 +614,7 @@ impl Contract {
 
         let is_non_mintable = if (copies - decrease_copies.0) == minted_copies {
             token_series.is_mintable = false;
+            token_series.price = None;
             true
         } else {
             false
