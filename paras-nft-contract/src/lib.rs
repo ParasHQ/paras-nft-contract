@@ -279,7 +279,7 @@ impl Contract {
         &self.transaction_fee
     }
 
-    pub fn get_market_data_transaction_fee (&self, token_series_id: &TokenId) -> u128{
+    pub fn get_market_data_transaction_fee (&self, token_series_id: &TokenSeriesId) -> u128{
         if let Some(transaction_fee) = self.market_data_transaction_fee.transaction_fee.get(&token_series_id){
             return transaction_fee;
         }
