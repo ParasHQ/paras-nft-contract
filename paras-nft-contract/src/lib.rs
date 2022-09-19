@@ -615,6 +615,18 @@ impl Contract {
         let is_non_mintable = if (copies - decrease_copies.0) == minted_copies {
             token_series.is_mintable = false;
             token_series.price = None;
+
+            env::log(
+                json!({
+                    "type": "nft_set_series_price",
+                    "params": {
+                        "token_series_id": token_series_id,
+                    }
+                })
+                .to_string()
+                .as_bytes(),
+            );
+
             true
         } else {
             false
