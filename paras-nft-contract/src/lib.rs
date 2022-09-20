@@ -11,7 +11,7 @@ use near_sdk::collections::{LazyOption, UnorderedMap, UnorderedSet};
 use near_sdk::json_types::{ValidAccountId, U128, U64};
 use near_sdk::{
     assert_one_yocto, env, near_bindgen, serde_json::json, AccountId, Balance, BorshStorageKey,
-    PanicOnDefault, Promise, PromiseOrValue, Gas, ext_contract, Timestamp
+    PanicOnDefault, Promise, PromiseOrValue, Gas, ext_contract, Timestamp, serde_json::value::Value::Null
 };
 use near_sdk::serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -305,17 +305,12 @@ impl Contract {
     #[payable]
     pub fn nft_create_series(
         &mut self,
-        creator_id: Option<ValidAccountId>,
         token_metadata: TokenMetadata,
         price: Option<U128>,
         royalty: Option<HashMap<AccountId, u32>>,
     ) -> TokenSeriesJson {
         let initial_storage_usage = env::storage_usage();
         let caller_id = env::predecessor_account_id();
-
-        if creator_id.is_some() {
-            assert_eq!(creator_id.unwrap().to_string(), caller_id, "Paras: Caller is not creator_id");
-        }
 
         let token_series_id = format!("{}", (self.token_series_by_id.len() + 1));
 
@@ -613,6 +608,20 @@ impl Contract {
 
         let is_non_mintable = if (copies - decrease_copies.0) == minted_copies {
             token_series.is_mintable = false;
+            token_series.price = None;
+
+            env::log(
+                json!({
+                    "type": "nft_set_series_price",
+                    "params": {
+                        "token_series_id": token_series_id,
+                        "price": Null,
+                    }
+                })
+                .to_string()
+                .as_bytes(),
+            );
+
             true
         } else {
             false
@@ -1221,7 +1230,6 @@ mod tests {
         copies: Option<u64>,
     ) {
         contract.nft_create_series(
-            None,
             TokenMetadata {
                 title: Some("Tsundere land".to_string()),
                 description: None,
