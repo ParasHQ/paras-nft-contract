@@ -11,7 +11,7 @@ use near_sdk::collections::{LazyOption, UnorderedMap, UnorderedSet};
 use near_sdk::json_types::{ValidAccountId, U128, U64};
 use near_sdk::{
     assert_one_yocto, env, near_bindgen, serde_json::json, AccountId, Balance, BorshStorageKey,
-    PanicOnDefault, Promise, PromiseOrValue, Gas, ext_contract, Timestamp
+    PanicOnDefault, Promise, PromiseOrValue, Gas, ext_contract, Timestamp, serde_json::value::Value::Null
 };
 use near_sdk::serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -616,6 +616,7 @@ impl Contract {
                     "type": "nft_set_series_price",
                     "params": {
                         "token_series_id": token_series_id,
+                        "price": Null,
                     }
                 })
                 .to_string()
