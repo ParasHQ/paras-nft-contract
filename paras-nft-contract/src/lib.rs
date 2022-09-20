@@ -95,7 +95,7 @@ pub struct TokenSeriesJson {
 	metadata: TokenMetadata,
 	creator_id: AccountId,
     royalty: HashMap<AccountId, u32>,
-    transaction_fee: Option<U128>
+    transaction_fee: U128
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
@@ -254,12 +254,11 @@ impl Contract {
         }
     }
 
-    pub fn calculate_market_data_transaction_fee(&mut self, token_series_id: &TokenSeriesId) -> u128{
+    pub fn calculate_new_market_data_transaction_fee(&mut self, token_series_id: &TokenSeriesId) -> u128{
         if let Some(transaction_fee) = self.market_data_transaction_fee.transaction_fee.get(&token_series_id){
             return transaction_fee;
         }
 
-        // fallback to default transaction fee
         self.calculate_current_transaction_fee()
     }
 
@@ -280,7 +279,7 @@ impl Contract {
         &self.transaction_fee
     }
 
-    pub fn get_market_data_transaction_fee (&self, token_series_id: &TokenId) -> u128{
+    pub fn get_market_data_transaction_fee (&self, token_series_id: &TokenSeriesId) -> u128{
         if let Some(transaction_fee) = self.market_data_transaction_fee.transaction_fee.get(&token_series_id){
             return transaction_fee;
         }
@@ -394,13 +393,13 @@ impl Contract {
 
         refund_deposit(env::storage_usage() - initial_storage_usage, 0);
 
-        TokenSeriesJson{
-          token_series_id,
-          metadata: token_metadata,
-          creator_id: caller_id.into(),
-          royalty: royalty_res,
-          transaction_fee: Some(current_transaction_fee.into())
-        }
+		TokenSeriesJson{
+            token_series_id,
+			metadata: token_metadata,
+			creator_id: caller_id.into(),
+            royalty: royalty_res,
+            transaction_fee: current_transaction_fee.into()
+		}
     }
 
     #[payable]
@@ -420,7 +419,7 @@ impl Contract {
         );
         let token_id: TokenId = self._nft_mint_series(token_series_id.clone(), receiver_id.to_string());
 
-        let for_treasury = price as u128 * self.calculate_market_data_transaction_fee(&token_series_id) / 10_000u128;
+        let for_treasury = price as u128 * self.calculate_new_market_data_transaction_fee(&token_series_id) / 10_000u128;
         let price_deducted = price - for_treasury;
         Promise::new(token_series.creator_id).transfer(price_deducted);
 
@@ -717,7 +716,13 @@ impl Contract {
         if let Some(tokens_per_owner) = &mut self.tokens.tokens_per_owner {
             let mut token_ids = tokens_per_owner.get(&owner_id).unwrap();
             token_ids.remove(&token_id);
-            tokens_per_owner.insert(&owner_id, &token_ids);
+
+            // remove the owner if there are no more tokens
+            if token_ids.is_empty() {
+                tokens_per_owner.remove(&owner_id);
+            } else {
+                tokens_per_owner.insert(&owner_id, &token_ids);
+            }
         }
 
         if let Some(token_metadata_by_id) = &mut self.tokens.token_metadata_by_id {
@@ -744,7 +749,7 @@ impl Contract {
 			metadata: token_series.metadata,
 			creator_id: token_series.creator_id,
             royalty: token_series.royalty,
-            transaction_fee: Some(current_transaction_fee.into()) 
+            transaction_fee: current_transaction_fee.into() 
 		}
 	}
 
@@ -777,12 +782,16 @@ impl Contract {
             .iter()
             .skip(start_index as usize)
             .take(limit)
-            .map(|(token_series_id, token_series)| TokenSeriesJson{
-                token_series_id,
-                metadata: token_series.metadata,
-                creator_id: token_series.creator_id,
-                royalty: token_series.royalty,
-                transaction_fee: None 
+            .map(|(token_series_id, token_series)| 
+                 {
+                    let current_transaction_fee = self.get_market_data_transaction_fee(&token_series_id);
+                    return TokenSeriesJson{
+                        token_series_id,
+                        metadata: token_series.metadata,
+                        creator_id: token_series.creator_id,
+                        royalty: token_series.royalty,
+                        transaction_fee: current_transaction_fee.into()
+                }
             })
             .collect()
     }
