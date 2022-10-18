@@ -405,11 +405,11 @@ impl Contract {
     #[payable]
     pub fn nft_buy(
         &mut self, 
-        token_series_id: TokenSeriesId
+        token_series_id: TokenSeriesId,
+        receiver_id: ValidAccountId
     ) -> TokenId {
         let initial_storage_usage = env::storage_usage();
         let attached_deposit = env::attached_deposit();
-        let receiver_id = env::predecessor_account_id();
         let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
         let price: u128 = token_series.price.expect("Paras: not for sale");
         assert!(
@@ -1328,7 +1328,7 @@ mod tests {
             .build()
         );
 
-        let token_id = contract.nft_buy("1".to_string());
+        let token_id = contract.nft_buy("1".to_string(), accounts(2));
 
         let token_from_nft_token = contract.nft_token(token_id);
         assert_eq!(
@@ -1485,7 +1485,7 @@ mod tests {
             .build()
         );
 
-        let token_id = contract.nft_buy("1".to_string());
+        let token_id = contract.nft_buy("1".to_string(), accounts(2));
 
         let token_from_nft_token = contract.nft_token(token_id);
         assert_eq!(
@@ -1746,7 +1746,7 @@ mod tests {
         assert_eq!(contract.get_transaction_fee().start_time, None);
 
         let series = contract.nft_get_series_single("1".to_string());
-        let series_transaction_fee: u128 = series.transaction_fee.unwrap().into();
+        let series_transaction_fee: u128 = series.transaction_fee.0;
         assert_eq!(series_transaction_fee, 500);
     }
 }
