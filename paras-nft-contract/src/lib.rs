@@ -405,19 +405,24 @@ impl Contract {
     #[payable]
     pub fn nft_buy(
         &mut self, 
-        token_series_id: TokenSeriesId
+        token_series_id: TokenSeriesId,
+        receiver_id: Option<ValidAccountId>
     ) -> TokenId {
         let initial_storage_usage = env::storage_usage();
         let attached_deposit = env::attached_deposit();
-        let receiver_id = env::predecessor_account_id();
         let token_series = self.token_series_by_id.get(&token_series_id).expect("Paras: Token series not exist");
         let price: u128 = token_series.price.expect("Paras: not for sale");
+        let receiver_id: AccountId = if let Some(receiver_id) = receiver_id {
+            receiver_id.to_string()
+        } else {
+            env::predecessor_account_id()
+        };
         assert!(
             attached_deposit >= price,
             "Paras: attached deposit is less than price : {}",
             price
         );
-        let token_id: TokenId = self._nft_mint_series(token_series_id.clone(), receiver_id.to_string());
+        let token_id: TokenId = self._nft_mint_series(token_series_id.clone(), receiver_id.clone());
 
         let for_treasury = price as u128 * self.calculate_new_market_data_transaction_fee(&token_series_id) / 10_000u128;
         let price_deducted = price - for_treasury;
@@ -430,7 +435,7 @@ impl Contract {
         refund_deposit(env::storage_usage() - initial_storage_usage, price);
 
         NearEvent::log_nft_mint(
-            receiver_id.to_string(),
+            receiver_id,
             vec![token_id.clone()],
             Some(json!({"price": price.to_string()}).to_string())
         );
@@ -1328,13 +1333,21 @@ mod tests {
             .build()
         );
 
-        let token_id = contract.nft_buy("1".to_string());
+        let token_id = contract.nft_buy("1".to_string(), Some(accounts(3)));
+
+        let token_from_nft_token = contract.nft_token(token_id);
+        assert_eq!(
+            token_from_nft_token.unwrap().owner_id,
+            accounts(3).to_string()
+        );
+
+        let token_id = contract.nft_buy("1".to_string(), None);
 
         let token_from_nft_token = contract.nft_token(token_id);
         assert_eq!(
             token_from_nft_token.unwrap().owner_id,
             accounts(2).to_string()
-        )
+        );
     }
 
     #[test]
@@ -1485,7 +1498,7 @@ mod tests {
             .build()
         );
 
-        let token_id = contract.nft_buy("1".to_string());
+        let token_id = contract.nft_buy("1".to_string(), Some(accounts(2)));
 
         let token_from_nft_token = contract.nft_token(token_id);
         assert_eq!(
@@ -1746,7 +1759,7 @@ mod tests {
         assert_eq!(contract.get_transaction_fee().start_time, None);
 
         let series = contract.nft_get_series_single("1".to_string());
-        let series_transaction_fee: u128 = series.transaction_fee.unwrap().into();
+        let series_transaction_fee: u128 = series.transaction_fee.0;
         assert_eq!(series_transaction_fee, 500);
     }
 }
