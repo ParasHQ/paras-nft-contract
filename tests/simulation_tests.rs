@@ -1,7 +1,5 @@
-use paras_nft_contract::ContractContract as Contract;
-use near_sdk_sim::{deploy, init_simulator, to_yocto, ContractAccount, UserAccount, DEFAULT_GAS, view};
+use near_sdk_sim::{init_simulator, to_yocto, UserAccount, DEFAULT_GAS};
 use near_sdk::serde_json::json;
-use near_sdk::test_utils::test_env::alice;
 use near_sdk_sim::types::AccountId;
 
 pub const NFT_CONTRACT_ID: &str = "nft";

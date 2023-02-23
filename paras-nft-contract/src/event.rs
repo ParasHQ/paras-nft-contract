@@ -85,7 +85,7 @@ impl NearEvent {
     }
 
     pub fn log(&self) {
-        near_sdk::env::log(&self.to_string().as_bytes());
+        near_sdk::env::log_str(&self.to_string());
     }
 
     pub fn log_nft_mint(owner_id: String, token_ids: Vec<String>, memo: Option<String>) {
